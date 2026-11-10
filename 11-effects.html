@@ -3,10 +3,10 @@
 <title>11. Turn a reality-gap knob · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
 <link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
 <body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
-<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html" aria-current="page">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Follow one real signal into the policy</a><a href="11-effects.html" aria-current="page">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
 <main id="main"><article><h1 id="11-turn-a-reality-gap-knob">11. Turn a reality-gap knob<a class="headerlink" href="#11-turn-a-reality-gap-knob" title="Permanent link">¶</a></h1>
-<p>Predict whether adding 40 ms of sensor lag will change the policy's actions. Open the native Newton experiment using an exact checkpoint from your run:</p>
-<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/effects_workshop.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_RUN/model_999.pt
+<p>Predict whether adding 40 ms of sensor lag will change the policy's actions. Open the native Newton experiment using the exact nominal walking checkpoint saved in lesson 8 (<code>source outputs/tutorial.env</code> in a new terminal):</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/effects_workshop.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_WALK_CHECKPOINT</span><span class="s2">"</span>
 </code></pre></div>
 
 <p>In <strong>Reality-gap experiment</strong>, change <strong>IMU/dq delay</strong> from zero to two samples and press <strong>Apply and restart trial</strong>. Playback closes while a fresh candidate is recorded, then reopens beside the same baseline ghost. The policy weights and initial mechanical state remain fixed. Editing a slider alone leaves the displayed recording unchanged; pending edits are labeled.</p>
@@ -84,10 +84,10 @@
 <p>Save your own settings from the viewer, or create a small JSON file for a headless trial. Unspecified fields use nominal defaults:</p>
 <div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>outputs
 <span class="nb">printf</span><span class="w"> </span><span class="s1">'{"observation_delay_ms":40}\n'</span><span class="w"> </span>&gt;<span class="w"> </span>outputs/delay40.json
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/effects_workshop.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_RUN/model_999.pt<span class="w"> </span>--effects<span class="w"> </span>outputs/delay40.json<span class="w"> </span>--record-only<span class="w"> </span>--output<span class="w"> </span>outputs/delay-workshop
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/effects_workshop.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_WALK_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--effects<span class="w"> </span>outputs/delay40.json<span class="w"> </span>--record-only<span class="w"> </span>--output<span class="w"> </span>outputs/delay-workshop
 </code></pre></div>
 
-<p>Replace the checkpoint path with your saved model. Use a fresh output directory for each workshop. <code>--headless</code> records and renders without a desktop; <code>--record-only</code> omits rendering. Change one factor, predict the outcome, and compare command response as well as survival. A successful simulated trial does not establish a hardware tolerance.</p>
+<p>Use your saved nominal walking model. Use a fresh output directory for each workshop. <code>--headless</code> records and renders without a desktop; <code>--record-only</code> omits rendering. Change one factor, predict the outcome, and compare command response as well as survival. A successful simulated trial does not establish a hardware tolerance.</p>
 <p><img alt="Actual independently simulated baseline ghost and backlash candidate, sharing world coordinates and a fixed command protocol" src="media/ghost-backlash.jpg" /></p>
 <p>This example uses training seed 42 and physical-start seed 0. Both completed 20 seconds; one trial cannot establish robustness. The backlash asset adds 14 tiny passive bodies, totaling 14 mg of authored mass. It is a discrete asset intervention, rather than an identical model with one scalar changed.</p>
 <h2 id="see-what-the-actor-actually-received">See what the actor actually received<a class="headerlink" href="#see-what-the-actor-actually-received" title="Permanent link">¶</a></h2>
@@ -100,7 +100,7 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <summary>Inspect delay clocks and the smaller delay-only launcher</summary>
 <p>Predict the effect of a 40 ms observation delay. Choose the exact saved checkpoint from your run directory, then record matching trials and open the ghost viewer:</p>
 <p>The <a href="09-evaluation.html#find-the-failing-condition">qualification explorer</a> compares your recorded outcomes; the ghost below helps inspect how their motions diverged.</p>
-<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reality_gap.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_RUN/model_49.pt<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reality_gap.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_WALK_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span>
 </code></pre></div>
 
 <p>Use the same exact checkpoint, seed, and commands. The script changes IMU and joint-velocity observation lag; joint-position and previous-action channels are unchanged. It is a specific sensor-delay experiment, not a claim that every input is delayed.</p>
@@ -122,5 +122,53 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </code></pre></div>
 
 <p><strong>Record:</strong> which signals were delayed, the delay in milliseconds and samples, and whether the policy survived long enough for the change to be interpretable.</p>
-</details></article><nav class="pagination" aria-label="Previous and next lesson"><a href="10-reality-gap.html">← 10. Which simulation signals exist on the robot?</a><a href="12-robustness.html">12. Teach the duck about uncertainty →</a></nav>
-<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/11-effects.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>
+</details>
+<details>
+<summary>Find a sensitivity curve with three settings of one knob</summary>
+<p><strong>Predict:</strong> will 20 ms of observation lag preserve standing but lose command response? Keep one nominal policy, one actual starting state and the 20-second commands fixed. Change only observation delay:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">for</span><span class="w"> </span>lag<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="m">20</span><span class="w"> </span><span class="m">40</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_WALK_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="s2">"</span><span class="nv">$lag</span><span class="s2">"</span><span class="w"> </span>--output<span class="w"> </span><span class="s2">"outputs/sensitivity/lag-</span><span class="nv">$lag</span><span class="s2">"</span>
+<span class="k">done</span>
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PY_SENSITIVITY'</span>
+<span class="s">import json</span>
+<span class="s">from pathlib import Path</span>
+<span class="s">import matplotlib</span>
+<span class="s">matplotlib.use("Agg")</span>
+<span class="s">import matplotlib.pyplot as plt</span>
+<span class="s">from isaaclab_tutorial.locomotion.comparison import assert_matched_start</span>
+
+<span class="s">lags = [0, 20, 40]</span>
+<span class="s">records = [json.loads(Path(f"outputs/sensitivity/lag-{lag}/receipt.json").read_text()) for lag in lags]</span>
+<span class="s">assert len({r["checkpoint_sha256"] for r in records}) == 1</span>
+<span class="s">assert len({r["start_condition"]["sample_sha256"] for r in records}) == 1</span>
+<span class="s">for lag, r in zip(lags, records):</span>
+<span class="s">    assert r["conditions"]["observation_delay_ms"] == lag</span>
+<span class="s">    assert_matched_start(records[0], r)</span>
+<span class="s">fig, axes = plt.subplots(1, 2, figsize=(9, 3.6), layout="constrained")</span>
+<span class="s">for lag, r in zip(lags, records):</span>
+<span class="s">    if not r["valid"]:</span>
+<span class="s">        axes[0].text(lag, 0, "invalid", rotation=90, ha="center")</span>
+<span class="s">        continue</span>
+<span class="s">    m, q = r["metrics"], r["qualification"]</span>
+<span class="s">    label = "fell" if m["fell"] else "response passed" if q["passed"] else "response failed"</span>
+<span class="s">    axes[0].scatter(lag, 100 * m["coverage"], marker="x" if m["fell"] else "o")</span>
+<span class="s">    axes[0].annotate(label, (lag, 100 * m["coverage"]), fontsize=8, rotation=25)</span>
+<span class="s">    if m["coverage"] &gt;= 1 and not m["fell"]:</span>
+<span class="s">        axes[1].scatter(lag, m["tracking_rmse"][0], color="tab:blue")</span>
+<span class="s">    else:</span>
+<span class="s">        axes[1].text(lag, 0, "unavailable", rotation=90, ha="center", fontsize=8)</span>
+<span class="s">axes[0].set(xlabel="IMU/dq lag (ms)", ylabel="Horizon coverage (%)", ylim=(-5, 125))</span>
+<span class="s">axes[1].set(xlabel="IMU/dq lag (ms)", ylabel="Complete-trial forward RMSE (m/s)")</span>
+<span class="s">axes[1].set_ylim(bottom=0)</span>
+<span class="s">for ax in axes:</span>
+<span class="s">    ax.set_xticks(lags)</span>
+<span class="s">    ax.grid(alpha=0.2)</span>
+<span class="s">fig.savefig("outputs/sensitivity/curve.png", dpi=150)</span>
+<span class="s">print("Open outputs/sensitivity/curve.png; unavailable tracking is not zero error.")</span>
+<span class="s">PY_SENSITIVITY</span>
+</code></pre></div>
+
+<p>A failed evaluator process is a software/numerical problem to inspect before interpreting the curve. Ordinary physical falls produce valid diagnostic receipts and remain plotted. A command-line loop alone does not validate those trials: check each receipt's initial state, command trace and effect settings if you change this experiment.</p>
+<p>This is one trained policy on one physical start. Repeat with the same additional starts at each lag to investigate sensitivity; independent training seeds are needed to estimate variation across learned policies. Use the ghost viewer on the zero-lag and changed-lag receipts to explain a divergence you see in the curve.</p>
+</details></article><nav class="pagination" aria-label="Previous and next lesson"><a href="10-reality-gap.html">← 10. Follow one real signal into the policy</a><a href="12-robustness.html">12. Teach the duck about uncertainty →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/6e3123f088079fce3b585c7362bbf7487b7ed733/docs/locomotion/11-effects.md">View this lesson on GitHub</a> · Snapshot 6e3123f</footer></main></div></body></html>

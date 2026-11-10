@@ -3,10 +3,10 @@
 <title>6. Can a better score hide worse walking? · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
 <link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
 <body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
-<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html" aria-current="page">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html" aria-current="page">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Follow one real signal into the policy</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
 <main id="main"><article><h1 id="6-can-a-better-score-hide-worse-walking">6. Can a better score hide worse walking?<a class="headerlink" href="#6-can-a-better-score-hide-worse-walking" title="Permanent link">¶</a></h1>
-<p>First evaluate a trained checkpoint so there is a real trajectory to inspect:</p>
-<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span>latest
+<p>Use the saved first-attempt variables from lesson 2 (<code>source outputs/tutorial.env</code> in a new terminal). First evaluate a trained checkpoint so there is a real trajectory to inspect:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_FIRST_CHECKPOINT</span><span class="s2">"</span>
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reward_workshop.py<span class="w"> </span>--trajectory<span class="w"> </span>outputs/evaluation/receipt.json
 </code></pre></div>
 
@@ -25,6 +25,66 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <p>At the same nonzero velocity error, a larger width gives a larger tracking reward. Both curves equal one at zero error; increasing tolerance does not create better tracking. The right panel shows this term's contribution after its actual weight and control interval are applied. These are equation curves using the nominal parameters, not learned-policy measurements.</p>
 <p>Try the workshop's width slider, then explain why making the score easier to earn could leave task performance unchanged.</p>
 </details>
+<details>
+<summary>What do the other reward sliders encourage?</summary>
+<table>
+<thead>
+<tr>
+<th>Terms</th>
+<th>Intended contribution</th>
+<th>What excessive weight can hide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>track_lin_vel</code>, <code>track_ang_vel</code></td>
+<td>Follow heading-frame translation and world-Z yaw</td>
+<td>Larger tolerance can reward inaccurate motion</td>
+</tr>
+<tr>
+<td><code>upright</code>, <code>pose</code></td>
+<td>Trunk uprightness and home-like leg pose; pose is standing-only</td>
+<td>Standing instead of responding to commands</td>
+</tr>
+<tr>
+<td><code>body_ang_vel</code>, <code>angular_momentum</code></td>
+<td>Penalize wobble and whole-body angular momentum</td>
+<td>Suppressing useful balancing motion</td>
+</tr>
+<tr>
+<td><code>dof_pos_limits</code>, <code>self_collisions</code></td>
+<td>Penalize soft-limit excursions and configured self-contact</td>
+<td>These penalties are not hard safety constraints</td>
+</tr>
+<tr>
+<td><code>action_rate_l2</code></td>
+<td>Penalize changes in successive raw actions</td>
+<td>Nearly constant actions without walking</td>
+</tr>
+<tr>
+<td><code>air_time</code></td>
+<td>Reward touchdown after a 0.125–0.3 s air-time window when moving is commanded</td>
+<td>Optimizing foot timing without velocity response</td>
+</tr>
+<tr>
+<td><code>foot_clearance</code>, <code>foot_swing_height</code></td>
+<td>Penalize the configured clearance/swing-height errors during commanded motion</td>
+<td>Unnatural stepping if other objectives are overwhelmed</td>
+</tr>
+<tr>
+<td><code>foot_slip</code></td>
+<td>Penalize contact motion during commanded motion</td>
+<td>Low slip from simply standing still</td>
+</tr>
+<tr>
+<td><code>head_pose_tracking</code></td>
+<td>Track the fixed zero head-command offsets</td>
+<td>Spending capacity on posture while locomotion fails</td>
+</tr>
+</tbody>
+</table>
+<p>The feet terms use a moving-command gate at 0.01 command norm in the pinned task. Contact state, air time and touchdown peaks make some terms stateful. Read the actual values in your saved <code>params/env.yaml</code>; inactive <code>head_pose_bias</code> cannot be reconstructed from this recording.</p>
+</details>
 <h2 id="predict-what-stronger-smoothness-will-teach">Predict what stronger smoothness will teach<a class="headerlink" href="#predict-what-stronger-smoothness-will-teach" title="Permanent link">¶</a></h2>
 <p>Make the <code>action_rate_l2</code> weight ten times more negative: −0.1 → −1.0. Before retraining, predict whether the duck will walk more smoothly, stop walking, or fall. The penalty measures changes in consecutive raw actions; it does not directly measure motor torque or energy.</p>
 <p>We actually trained this candidate from scratch with the same seed and budget as the reference: 4096 environments × 24 steps × 1000 iterations, or 98,304,000 transitions per policy. The saved task/learner recipes differ only in that reward weight. Both were evaluated on the same <code>balance-starts-v1</code> initial state and 20-second commands.</p>
@@ -42,17 +102,84 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 </details>
 <h2 id="find-a-loophole">Find a loophole<a class="headerlink" href="#find-a-loophole" title="Permanent link">¶</a></h2>
 <p>Try increasing upright/standing-related rewards while reducing velocity tracking. Can a nearly stationary trajectory earn a more attractive score? Compare task metrics before deciding that a larger return is useful.</p>
-<p>Select <strong>Save candidate and training command</strong>. The workshop writes <code>candidate.json</code>, <code>scores.json</code>, a score plot, and <code>train-candidate.txt</code>. Inspect the command, then run it in a separate terminal to train a new candidate with an explicit configuration. New training is what can change behavior.</p>
+<p>Select <strong>Save candidate and training command</strong>. The workshop writes <code>candidate.json</code>, <code>scores.json</code>, a score plot, and <code>train-candidate.txt</code>. Inspect the command, then run it in a separate terminal to train a new candidate with an explicit configuration. New training is what can change behavior. Keep the candidate at the same seed, environment count and iteration budget as your first attempt; edit the printed command if you used the low-memory preset. Save its exact path as <code>DUCK_REWARD_CHECKPOINT</code> so the first attempt stays identifiable.</p>
 <p>For headless rescoring:</p>
-<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reward_workshop.py<span class="w"> </span>--trajectory<span class="w"> </span>outputs/evaluation/receipt.json<span class="w"> </span>--headless
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reward_workshop.py<span class="w"> </span>--trajectory<span class="w"> </span>outputs/evaluation/receipt.json<span class="w"> </span>--candidate<span class="w"> </span>outputs/reward-workshop/candidate.json<span class="w"> </span>--headless<span class="w"> </span>--output<span class="w"> </span>outputs/reward-rescore
 </code></pre></div>
 
-<p>Add <code>--candidate outputs/reward-workshop/candidate.json</code> to reload saved weights. Add <code>--capture</code> with <code>--headless</code> to render the recorded pose stream.</p>
+<p>This reloads your saved weights and writes the rescored result to a separate directory, preserving the candidate you trained. Add <code>--capture</code> with <code>--headless</code> to render the recorded pose stream.</p>
 <p>Once candidate training writes a checkpoint, compare the two actual policies with a ghost:</p>
-<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reality_gap.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/BASELINE_RUN/model_49.pt<span class="w"> </span>--candidate-checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/CANDIDATE_RUN/model_49.pt<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">DUCK_REWARD_CHECKPOINT</span><span class="o">=</span><span class="s2">"logs/rsl_rl/microduck_tutorial/YOUR_REWARD_RUN/model_49.pt"</span>
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reality_gap.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_FIRST_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--candidate-checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_REWARD_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span>
 </code></pre></div>
 
-<p>Replace both paths with saved checkpoints. Reward-only rescoring keeps one motion stream; this command runs two learned policies. Compare both recorded trajectories under both objectives using the workshop and retain independent tracking/fall metrics. Do not compare only each policy's preferred reward. See <a href="11-effects.html">the ghost controls</a> for synchronized playback and early-ending markers.</p>
-<p>The evaluator uses the common nominal reward configuration when comparing policies. A candidate's training objective is recovered explicitly from its saved parameters, then applied to both recordings during rescoring.</p>
+<p>Replace <code>YOUR_REWARD_RUN</code> with the printed candidate run directory before launching. Keep <code>DUCK_FIRST_CHECKPOINT</code> from lesson 2. Reward-only rescoring keeps one motion stream; this command runs two learned policies. Compare both recorded trajectories under both objectives using the workshop and retain independent tracking/fall metrics. Do not compare only each policy's preferred reward. See <a href="11-effects.html">the ghost controls</a> for synchronized playback and early-ending markers.</p>
+<p>The evaluator uses the common nominal reward configuration when comparing policies. The workshop does not automatically recover a candidate's training objective: pass the <code>candidate.json</code> you saved before launching its matching training command. If you subsequently edited that recipe, use its actual saved reward values instead.</p>
+<details>
+<summary>Fill the four cells of your own score comparison</summary>
+<p>After the ghost command records both motions, apply the saved objective to each:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reward_workshop.py<span class="w"> </span>--trajectory<span class="w"> </span>outputs/reality-gap/reference/receipt.json<span class="w"> </span>--candidate<span class="w"> </span>outputs/reward-workshop/candidate.json<span class="w"> </span>--headless<span class="w"> </span>--output<span class="w"> </span>outputs/cross-score/baseline
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reward_workshop.py<span class="w"> </span>--trajectory<span class="w"> </span>outputs/reality-gap/candidate/receipt.json<span class="w"> </span>--candidate<span class="w"> </span>outputs/reward-workshop/candidate.json<span class="w"> </span>--headless<span class="w"> </span>--output<span class="w"> </span>outputs/cross-score/candidate
+</code></pre></div>
+
+<p>Each <code>scores.json</code> contains <code>original_score</code> and <code>candidate_score</code>. Put the two files into this table:</p>
+<table>
+<thead>
+<tr>
+<th>Actual motion</th>
+<th>Original objective</th>
+<th>Candidate objective</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Baseline policy</td>
+<td>baseline <code>original_score</code></td>
+<td>baseline <code>candidate_score</code></td>
+</tr>
+<tr>
+<td>Candidate policy</td>
+<td>candidate <code>original_score</code></td>
+<td>candidate <code>candidate_score</code></td>
+</tr>
+</tbody>
+</table>
+<p>Read these beside each recording's fall flag, coverage and tracking errors. If a policy falls early, cumulative scores cover different durations and are not a matched-duration ranking. Predict which row should improve under your objective, then explain the actual result.</p>
+</details>
+<details>
+<summary>Make a reset, a timeout and a fall distinguishable</summary>
+<p>In the puppet from lesson 3, press <strong>Reset experiment</strong>: this is an explicit reset, not a physical failure. Then run the fixed evaluator twice with the same first policy:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_FIRST_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--seconds<span class="w"> </span><span class="m">0</span>.04<span class="w"> </span>--output<span class="w"> </span>outputs/endings/short
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_FIRST_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--output<span class="w"> </span>outputs/endings/full
+</code></pre></div>
+
+<p>The 0.04-second case is a <strong>recorder horizon</strong>, not the environment's timeout. Inspect its receipt's trajectory length, <code>terminated</code>/<code>truncated</code> transition fields and ending flags before calling it a timeout. For an actual task time limit, run the full case to the configured 20 seconds; if it falls sooner, that run is a fall instead. The supported two-step experiment below guarantees a time limit without asking a weak policy to balance. To deliberately observe a physical fall, remove support in the puppet and change a knee target, then inspect its saved ending label. Do this only in simulation.</p>
+<p>To observe an actual timeout directly, shorten the <strong>supported</strong> inspection task after resolving its configuration:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PY_TIMEOUT'</span>
+<span class="s">import gymnasium as gym</span>
+<span class="s">import torch</span>
+<span class="s">from isaaclab.app import launch_simulation</span>
+<span class="s">from isaaclab_tasks.utils import resolve_task_config</span>
+<span class="s">import isaaclab_tutorial.tasks</span>
+
+<span class="s">cfg, _ = resolve_task_config("MicroDuckTutorial-Inspect", "rsl_rl_cfg_entry_point", overrides=())</span>
+<span class="s">cfg.episode_length_s = 0.04</span>
+<span class="s">cfg.sim.visualizer_cfgs = []</span>
+<span class="s">with launch_simulation(cfg):</span>
+<span class="s">    env = gym.make("MicroDuckTutorial-Inspect", cfg=cfg)</span>
+<span class="s">    try:</span>
+<span class="s">        env.reset(seed=0)</span>
+<span class="s">        for _ in range(2):</span>
+<span class="s">            obs, reward, terminated, truncated, info = env.step(torch.zeros((1, 14), device=env.unwrapped.device))</span>
+<span class="s">        assert not terminated[0] and truncated[0]</span>
+<span class="s">        print({"terminated": bool(terminated[0]), "truncated": bool(truncated[0]), "info_keys": list(info)})</span>
+<span class="s">    finally:</span>
+<span class="s">        env.close()</span>
+<span class="s">PY_TIMEOUT</span>
+</code></pre></div>
+
+<p>The root is supported and fall termination disabled in this inspection configuration. The task itself times out after two control steps; training/evaluation configurations remain unchanged.</p>
+<p>A manual reset clears physical/controller history; a fall is a true terminal event; a time limit is truncation. Lesson 7 explains how the pinned runner bootstraps the latter. <strong>Record:</strong> which event you observed and which signal proves it. If your duck never reached a timeout, leave that outcome unobserved rather than inventing one.</p>
+</details>
 <p><strong>Record:</strong> “I increased the score by …; this does/does not demonstrate improved walking because ….”</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="05-observations.html">← 5. Become an observation detective</a><a href="07-ppo.html">7. Explain the training run you already launched →</a></nav>
-<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/06-rewards.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/6e3123f088079fce3b585c7362bbf7487b7ed733/docs/locomotion/06-rewards.md">View this lesson on GitHub</a> · Snapshot 6e3123f</footer></main></div></body></html>

@@ -3,14 +3,14 @@
 <title>12. Teach the duck about uncertainty · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
 <link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
 <body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
-<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html" aria-current="page">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Follow one real signal into the policy</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html" aria-current="page">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
 <main id="main"><article><h1 id="12-teach-the-duck-about-uncertainty">12. Teach the duck about uncertainty<a class="headerlink" href="#12-teach-the-duck-about-uncertainty" title="Permanent link">¶</a></h1>
 <p>Use <a href="09-evaluation.html#find-the-failing-condition">the qualification explorer</a> to find a condition where your frozen policy struggles. Predict whether training with varied lag will help. Start a bounded fresh delay-trained policy:</p>
 <div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>isaaclab<span class="w"> </span>train<span class="w"> </span>--rl_library<span class="w"> </span>rsl_rl<span class="w"> </span>--task<span class="w"> </span>MicroDuckTutorial-Velocity-Flat-Delay<span class="w"> </span>--num_envs<span class="w"> </span><span class="m">128</span><span class="w"> </span>--max_iterations<span class="w"> </span><span class="m">50</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--run_name<span class="w"> </span>delay_preview<span class="w"> </span>--visualizer<span class="w"> </span>none
 </code></pre></div>
 
-<p>Replay its exact saved checkpoint with <code>--training-profile delay</code>. A short run can fail before reaching the walking commands; keep that result. The profile flag checks the saved training task and complete environment configuration before reconstructing the chosen evaluation conditions. Equal tensor widths alone do not qualify a checkpoint.</p>
-<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--training-profile<span class="w"> </span>delay<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_DELAY_RUN/model_49.pt<span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/delay-trained-check
+<p>Set <code>export DUCK_DELAY_CHECKPOINT="logs/rsl_rl/microduck_tutorial/YOUR_DELAY_RUN/model_49.pt"</code> using its printed run directory, then replay that exact checkpoint with <code>--training-profile delay</code>. A short run can fail before reaching the walking commands; keep that result. The profile flag checks the saved training task and complete environment configuration before reconstructing the chosen evaluation conditions. Equal tensor widths alone do not qualify a checkpoint.</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--training-profile<span class="w"> </span>delay<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_DELAY_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/delay-trained-check
 </code></pre></div>
 
 <h2 id="change-the-training-distribution-keep-the-test-fixed">Change the training distribution, keep the test fixed<a class="headerlink" href="#change-the-training-distribution-keep-the-test-fixed" title="Permanent link">¶</a></h2>
@@ -65,13 +65,105 @@
 <h2 id="compare-policies-under-the-same-test">Compare policies under the same test<a class="headerlink" href="#compare-policies-under-the-same-test" title="Permanent link">¶</a></h2>
 <p>Before looking at the example below, predict whether delay training helps under fixed 40 ms sensor lag. Will it preserve nominal behavior? Will training both mechanisms necessarily handle both better?</p>
 <p>Evaluate the nominal and delay-trained policies under the same start and fixed lag, keeping distinct output directories:</p>
-<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_NOMINAL_RUN/model_49.pt<span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/nominal-under-lag
-uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--training-profile<span class="w"> </span>delay<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_DELAY_RUN/model_49.pt<span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/delay-under-lag
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_FIRST_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/nominal-under-lag
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--training-profile<span class="w"> </span>delay<span class="w"> </span>--checkpoint<span class="w"> </span><span class="s2">"</span><span class="nv">$DUCK_DELAY_CHECKPOINT</span><span class="s2">"</span><span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/delay-under-lag
 uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/compare.py<span class="w"> </span>--reference<span class="w"> </span>outputs/nominal-under-lag/receipt.json<span class="w"> </span>--candidate<span class="w"> </span>outputs/delay-under-lag/receipt.json
 </code></pre></div>
 
-<p>Replace both paths with your saved checkpoints. Compare command response, coverage and falls, then repeat without the lag. Use equal completed transition budgets when comparing training recipes. For a broader comparison, train at least three independent seeds per profile and use <code>qualify.py --training-profile PROFILE</code> under identical evaluation starts and conditions. Use a separate report per training profile and test condition.</p>
+<p>Use the first nominal attempt from lesson 2 and the delay preview above, with matched completed budgets. Compare command response, coverage and falls, then repeat without the lag. Use equal completed transition budgets when comparing training recipes. For a broader comparison, train at least three independent seeds per profile and use <code>qualify.py --training-profile PROFILE</code> under identical evaluation starts and conditions. Use a separate report per training profile and test condition.</p>
 <p>Keep failed and invalid attempts in the outcome counts. Full-trial tracking error stays unavailable when no trial completes. Improving one fixed test while losing nominal walking is a tradeoff to investigate, not automatic progress toward transfer.</p>
+<details>
+<summary>Build your own four-profile, four-condition grid</summary>
+<p>The short version teaches the method even if all four policies fail. Reuse your fresh nominal 128-environment/50-iteration seed-42 attempt and the delay preview above. Train the other two profiles with the same budget:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>isaaclab<span class="w"> </span>train<span class="w"> </span>--rl_library<span class="w"> </span>rsl_rl<span class="w"> </span>--task<span class="w"> </span>MicroDuckTutorial-Velocity-Flat-Backlash<span class="w"> </span>--num_envs<span class="w"> </span><span class="m">128</span><span class="w"> </span>--max_iterations<span class="w"> </span><span class="m">50</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--run_name<span class="w"> </span>backlash_preview<span class="w"> </span>--visualizer<span class="w"> </span>none
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>isaaclab<span class="w"> </span>train<span class="w"> </span>--rl_library<span class="w"> </span>rsl_rl<span class="w"> </span>--task<span class="w"> </span>MicroDuckTutorial-Velocity-Flat-Combined<span class="w"> </span>--num_envs<span class="w"> </span><span class="m">128</span><span class="w"> </span>--max_iterations<span class="w"> </span><span class="m">50</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--run_name<span class="w"> </span>combined_preview<span class="w"> </span>--visualizer<span class="w"> </span>none
+</code></pre></div>
+
+<p>If you changed the first attempt's budget, match it in all four runs. Do not compare a supplied 98-million-transition reference with a fresh 153,600-transition candidate as an equal-budget training ablation.</p>
+<p>Copy the four exact checkpoint paths into a local file, replacing each placeholder. Lists permit independent training seeds later:</p>
+<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>outputs/robustness
+cat<span class="w"> </span>&gt;<span class="w"> </span>outputs/robustness/checkpoints.json<span class="w"> </span><span class="s">&lt;&lt;'JSON'</span>
+<span class="s">{</span>
+<span class="s">  "nominal": ["logs/rsl_rl/microduck_tutorial/YOUR_FIRST_ATTEMPT/model_49.pt"],</span>
+<span class="s">  "delay": ["logs/rsl_rl/microduck_tutorial/YOUR_DELAY_RUN/model_49.pt"],</span>
+<span class="s">  "backlash": ["logs/rsl_rl/microduck_tutorial/YOUR_BACKLASH_RUN/model_49.pt"],</span>
+<span class="s">  "combined": ["logs/rsl_rl/microduck_tutorial/YOUR_COMBINED_RUN/model_49.pt"]</span>
+<span class="s">}</span>
+<span class="s">JSON</span>
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PY_MATRIX'</span>
+<span class="s">import hashlib</span>
+<span class="s">import json</span>
+<span class="s">import subprocess</span>
+<span class="s">import sys</span>
+<span class="s">from pathlib import Path</span>
+<span class="s">import yaml</span>
+<span class="s">import numpy as np</span>
+<span class="s">import matplotlib</span>
+<span class="s">matplotlib.use("Agg")</span>
+<span class="s">import matplotlib.pyplot as plt</span>
+<span class="s">from isaaclab_tutorial.locomotion.training import checkpoint_progress</span>
+
+<span class="s">root = Path("outputs/robustness")</span>
+<span class="s">models = json.loads((root / "checkpoints.json").read_text())</span>
+<span class="s">profiles = ["nominal", "delay", "backlash", "combined"]</span>
+<span class="s">conditions = {"nominal": {}, "lag40": {"observation_delay_ms": 40},</span>
+<span class="s">              "backlash": {"backlash": True}, "combined": {"backlash": True, "observation_delay_ms": 40}}</span>
+<span class="s"># Match saved environment counts, horizons, realized update counters and seed sets.</span>
+<span class="s">budgets, seed_sets, expected_models = [], [], {}</span>
+<span class="s">assert set(models) == set(profiles)</span>
+<span class="s">for profile in profiles:</span>
+<span class="s">    identities = {}</span>
+<span class="s">    for checkpoint in models[profile]:</span>
+<span class="s">        path = Path(checkpoint)</span>
+<span class="s">        env = yaml.load((path.parent / "params/env.yaml").read_text(), Loader=yaml.BaseLoader)</span>
+<span class="s">        agent = yaml.load((path.parent / "params/agent.yaml").read_text(), Loader=yaml.BaseLoader)</span>
+<span class="s">        budgets.append((int(env["scene"]["num_envs"]), int(agent["num_steps_per_env"]), checkpoint_progress(path)))</span>
+<span class="s">        seed = int(agent["seed"])</span>
+<span class="s">        assert seed not in identities, "One checkpoint per independent training seed."</span>
+<span class="s">        identities[seed] = hashlib.sha256(path.read_bytes()).hexdigest()</span>
+<span class="s">    assert identities, "Each training profile needs checkpoints."</span>
+<span class="s">    seed_sets.append(set(identities))</span>
+<span class="s">    expected_models[profile] = identities</span>
+<span class="s">assert all(b == budgets[0] for b in budgets), "Use equal completed training budgets."</span>
+<span class="s">assert all(seeds == seed_sets[0] for seeds in seed_sets), "Match training seeds across profiles."</span>
+<span class="s">grid = np.empty((4, 4))</span>
+<span class="s">labels = []</span>
+<span class="s">for row, profile in enumerate(profiles):</span>
+<span class="s">    labels.append([])</span>
+<span class="s">    for col, (condition, settings) in enumerate(conditions.items()):</span>
+<span class="s">        effects = root / f"{condition}.json"</span>
+<span class="s">        effects.write_text(json.dumps(settings))</span>
+<span class="s">        output = root / profile / condition</span>
+<span class="s">        command = [sys.executable, "scripts/locomotion/qualify.py", "--training-profile", profile,</span>
+<span class="s">                   "--effects", str(effects), "--seeds", "0", "1", "2", "--output", str(output)]</span>
+<span class="s">        for checkpoint in models[profile]:</span>
+<span class="s">            command.extend(["--checkpoint", checkpoint])</span>
+<span class="s">        subprocess.run(command, check=True)</span>
+<span class="s">        report = json.loads((output / "report.json").read_text())</span>
+<span class="s">        assert report["complete"] and not report["errors"]</span>
+<span class="s">        actual_models = {m["training_seed"]: m["sha256"] for m in report["configuration"]["models"]}</span>
+<span class="s">        assert actual_models == expected_models[profile], "Policy changed during the comparison."</span>
+<span class="s">        summary = report["summary"]</span>
+<span class="s">        grid[row, col] = summary["qualified_rate_across_training_seeds"]["mean"]</span>
+<span class="s">        labels[-1].append(f"response {grid[row, col]:.0%}\nsurvival {summary['survival_rate_across_training_seeds']['mean']:.0%}")</span>
+<span class="s">fig, ax = plt.subplots(figsize=(8, 4.8), layout="constrained")</span>
+<span class="s">image = ax.imshow(grid, vmin=0, vmax=1, cmap="YlGnBu")</span>
+<span class="s">for row in range(4):</span>
+<span class="s">    for col in range(4):</span>
+<span class="s">        ax.text(col, row, labels[row][col], ha="center", va="center", fontsize=8,</span>
+<span class="s">                color="white" if grid[row, col] &gt; 0.6 else "black")</span>
+<span class="s">ax.set(xticks=range(4), xticklabels=list(conditions), yticks=range(4), yticklabels=profiles,</span>
+<span class="s">       xlabel="Fixed evaluation condition", ylabel="Training profile", title="All attempted outcomes remain in the rates")</span>
+<span class="s">fig.colorbar(image, ax=ax, label="Response pass rate")</span>
+<span class="s">fig.savefig(root / "grid.png", dpi=150)</span>
+<span class="s">print("Open outputs/robustness/grid.png and the individual report.json files.")</span>
+<span class="s">PY_MATRIX</span>
+</code></pre></div>
+
+<p>The starter grid uses one independent training seed and three matched starts: <strong>48 attempted evaluations</strong>. Its cross-training-seed standard deviation stays unavailable. Every cell reports response and survival separately; numerical failures remain invalid attempted outcomes. Incomplete/errored collections stop the script instead of becoming a finished grid. Keep the individual reports to inspect why a cell failed.</p>
+<p>For the broader planned comparison, train all four profiles with the lesson-8 longer budget and training seeds <strong>42, 0 and 1</strong>. Put three paths per profile in the JSON, then change the evaluation seed arguments to <code>0</code> through <code>9</code>. That produces <strong>480 attempts</strong> across twelve independently trained policies. Compare the per-policy rates and their sample standard deviation in each report. An outside-range delay, such as 60 ms, is a separate sensitivity condition, not another in-range result.</p>
+<p>The grid tests a hypothesis, not an expected improvement: identify a nominal-performance loss, a surviving but unresponsive policy and an outright fall. Investigate with two matched receipts in <code>compare.py</code>; do not remove an unfavorable outcome from the grid.</p>
+</details>
 <h2 id="look-at-the-learned-difference">Look at the learned difference<a class="headerlink" href="#look-at-the-learned-difference" title="Permanent link">¶</a></h2>
 <p>In <a href="11-effects.html">the native effects workshop</a>, pass <code>--training-profile delay</code> (or <code>backlash</code>/<code>combined</code>) with that policy's exact checkpoint. The same frozen policy then encounters different evaluation conditions. To compare two separately trained policies, evaluate both with the same effect file and start, then pass their two receipts to <code>compare.py</code>. Keep both objectives and independent task metrics visible.</p>
 <p><img alt="Actual matched-start comparison under 40 ms sensor lag: the blue nominal-policy ghost holds its fallen pose while the solid delay-trained duck completes the commands" src="media/robust-training-ghost.jpg" /></p>
@@ -93,4 +185,4 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <p>Observation history is another explicit architecture experiment: it changes inputs, reset state and deployment requirements. Add it during training and verify the matching export/runtime rather than adding it only on the robot.</p>
 </details>
 <p><strong>Record:</strong> which uncertainty was sampled per robot, per episode or over time, and whether the candidate improved the same held-fixed test without losing nominal behavior.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="11-effects.html">← 11. Turn a reality-gap knob</a><a href="13-deployment.html">13. Export without changing the policy →</a></nav>
-<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/12-robustness.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/6e3123f088079fce3b585c7362bbf7487b7ed733/docs/locomotion/12-robustness.md">View this lesson on GitHub</a> · Snapshot 6e3123f</footer></main></div></body></html>

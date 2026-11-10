@@ -3,7 +3,7 @@
 <title>7. Explain the training run you already launched · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
 <link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
 <body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
-<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html" aria-current="page">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html" aria-current="page">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Follow one real signal into the policy</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
 <main id="main"><article><h1 id="7-explain-the-training-run-you-already-launched">7. Explain the training run you already launched<a class="headerlink" href="#7-explain-the-training-run-you-already-launched" title="Permanent link">¶</a></h1>
 <p><strong>Two-minute challenge:</strong> open the <a href="08-training.html#open-the-investigator">training investigator</a>. Predict the effect of doubling the number of parallel ducks, then try its budget control. A calculation you can check makes the PPO recipe easier to read.</p>
 <p>Find the first run's environment count, rollout horizon, and iteration number. The teaching preview uses 128 ducks, 24 control steps per rollout, and 50 iterations. Each control step lasts 20 ms; the physics runs four 5 ms substeps inside it.</p>
@@ -69,8 +69,87 @@
     Flags --&gt;|Time limit| Timeout[Add discounted stored pre-step value to that transition reward]</pre>
 <p>The evaluator holds the first failed pose rather than letting autoreset conceal it. During training, the environment autoresets before returning observations to the runner. Ending flags preserve the distinction; the time-limit addition uses the runner's stored pre-step value, not the new reset state's value. See the numerical example above for this pinned runner's approximation.</p>
 </details>
+<details>
+<summary>Turn three TD residuals into one advantage</summary>
+<p>Use illustrative rewards <code>[0.3, 0.2, 0.1]</code>, values <code>[1.0, 0.9, 0.8]</code>, and a true terminal fall after the third transition. With <code>γ = 0.99</code>, the residuals are <code>[0.191, 0.092, -0.7]</code>. GAE accumulates backwards with <code>γλ = 0.9405</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Transition</th>
+<th style="text-align: right;">Residual δ</th>
+<th style="text-align: right;">Advantage A = δ + γλ × next A</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2, terminal fall</td>
+<td style="text-align: right;">−0.700</td>
+<td style="text-align: right;">−0.700</td>
+</tr>
+<tr>
+<td>1</td>
+<td style="text-align: right;">0.092</td>
+<td style="text-align: right;">−0.56635</td>
+</tr>
+<tr>
+<td>0</td>
+<td style="text-align: right;">0.191</td>
+<td style="text-align: right;">−0.341652175</td>
+</tr>
+</tbody>
+</table>
+<p>The value targets are <code>A + V</code>: approximately <code>[0.65835, 0.33365, 0.1]</code>. Positive immediate reward can still lead to negative advantage when the subsequent outcome is worse than the critic expected. This terminal example has no timeout addition; use the earlier table for the pinned runner's separate timeout convention. Advantage normalization during optimization is another step.</p>
+<p><strong>Predict:</strong> if the final reward improves, which earlier advantages change? All preceding advantages receive the discounted effect.</p>
+</details>
 <p>The maintained PPO recipe uses 24 control steps per environment, discount 0.99, GAE lambda 0.95, clip parameter 0.2, five learning epochs, and four minibatches. A rollout of 128 × 24 contains 3,072 transitions. Fifty iterations collect 153,600 transitions, regardless of how many optimizer minibatches reuse them.</p>
 <p>Each epoch splits the rollout into four minibatches of 768 samples. Five epochs give 20 optimizer steps per iteration, or 1,000 over the preview run. The optimizer jointly updates actor and critic; those are not two separate counts of fresh experience. The investigator reads optimizer counters from the actual saved checkpoint alongside the arithmetic prediction.</p>
+<details>
+<summary>Find each concept in the actual runner configuration</summary>
+<p>The tutorial's <code>tasks/locomotion/config/microduck/agents/rsl_rl_ppo_cfg.py</code> inherits the pinned Microduck runner. Your run's <code>params/agent.yaml</code> contains the resolved values:</p>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Saved configuration field</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rollout horizon</td>
+<td><code>num_steps_per_env</code></td>
+</tr>
+<tr>
+<td>Discount and GAE</td>
+<td><code>algorithm.gamma</code>, <code>algorithm.lam</code></td>
+</tr>
+<tr>
+<td>Probability-ratio clipping</td>
+<td><code>algorithm.clip_param</code></td>
+</tr>
+<tr>
+<td>Entropy and value weighting</td>
+<td><code>algorithm.entropy_coef</code>, <code>algorithm.value_loss_coef</code></td>
+</tr>
+<tr>
+<td>Gradient clipping</td>
+<td><code>algorithm.max_grad_norm</code></td>
+</tr>
+<tr>
+<td>Data reuse</td>
+<td><code>algorithm.num_learning_epochs</code>, <code>algorithm.num_mini_batches</code></td>
+</tr>
+<tr>
+<td>Actor/critic architecture</td>
+<td><code>actor</code>, <code>critic</code></td>
+</tr>
+<tr>
+<td>Requested update cycles</td>
+<td><code>max_iterations</code></td>
+</tr>
+</tbody>
+</table>
+<p>Read the YAML from <code>DUCK_FIRST_RUN</code>. Find gamma, lambda and the epoch count before changing anything. The saved resolved configuration is more informative than the small subclass alone.</p>
+</details>
 <p><strong>Experiment:</strong> change only the number of environments in a new short run. Predict the new experience budget and memory use direction. A changed transition budget is a changed experiment; do not call it an equal-data comparison.</p>
 <p><strong>Check yourself:</strong> why do we collect fresh data after the PPO updates? PPO learns from recent experience sampled by its rollout policy; indefinitely reusing old data changes that relationship.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="06-rewards.html">← 6. Can a better score hide worse walking?</a><a href="08-training.html">8. Investigate the first attempt →</a></nav>
-<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/07-ppo.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/6e3123f088079fce3b585c7362bbf7487b7ed733/docs/locomotion/07-ppo.md">View this lesson on GitHub</a> · Snapshot 6e3123f</footer></main></div></body></html>

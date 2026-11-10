@@ -1,12 +1,102 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>10. Which simulation signals exist on the robot? · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
+<title>10. Follow one real signal into the policy · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
 <link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
 <body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
-<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html" aria-current="page">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
-<main id="main"><article><h1 id="10-which-simulation-signals-exist-on-the-robot">10. Which simulation signals exist on the robot?<a class="headerlink" href="#10-which-simulation-signals-exist-on-the-robot" title="Permanent link">¶</a></h1>
-<p>Before hardware control, map every actor field and output joint to a real interface. Record sensor source, units, coordinate frame, joint sign/order, reference position, preprocessing, capture timestamp, receive timestamp, and update rate. Identify estimated quantities such as gravity direction or joint velocity.</p>
-<p>The critic's simulation-only state is not a deployment input. Encoder readings need calibration to the same joint coordinates used in training. A matching-looking stance does not prove signs, scale, delay, or motor dynamics are correct.</p>
-<p>On an actual Microduck, first gather read-only calibrated sensor/timing logs. Compare one hand-moved joint and the IMU frame with the simulator. Record firmware, bus, power conditions, and control rate. Use <a href="13-deployment.html">the standard Duck runtime</a> for ONNX deployment, checking calibration and timing on your particular robot before enabling motion.</p>
-<p><strong>Challenge:</strong> give one mismatch that can leave the duck looking correct in a photo while causing a deployed policy to fail.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="09-evaluation.html">← 9. Evaluate what you actually care about</a><a href="11-effects.html">11. Turn a reality-gap knob →</a></nav>
-<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/10-reality-gap.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html" aria-current="page">10. Follow one real signal into the policy</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<main id="main"><article><h1 id="10-follow-one-real-signal-into-the-policy">10. Follow one real signal into the policy<a class="headerlink" href="#10-follow-one-real-signal-into-the-policy" title="Permanent link">¶</a></h1>
+<p><strong>Challenge:</strong> the right knee answers on motor ID 13. Which observation and action slots should it use? Trace the source-based map, then check the same mapping on your own simulated recording before connecting hardware.</p>
+<p><img alt="Standard Duck SDK sensor, policy and motor-target mapping" src="media/hardware-signal-map.jpg" /></p>
+<p>This schematic describes the <a href="https://github.com/pollen-robotics/microduck/tree/da34a2212ae12eddfd73d0dfbf924f291aaf1dc9/duck-control">pinned standard Duck runtime</a>. It is an interface map; it does not show measured wiring, calibration or timing on your robot.</p>
+<h2 id="trace-the-knee-packet">Trace the knee packet<a class="headerlink" href="#trace-the-knee-packet" title="Permanent link">¶</a></h2>
+<p>Use the first nominal evaluation from lesson 2. Predict the right-knee feature and target before running:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;'PY_PACKET'</span>
+<span class="s">import json</span>
+<span class="s">from pathlib import Path</span>
+
+<span class="s">receipt = json.loads(Path("outputs/evaluation/receipt.json").read_text())</span>
+<span class="s">row = receipt["trajectory"][0]</span>
+<span class="s">servo = receipt["joint_names"].index("right_knee")</span>
+<span class="s">home = receipt["contract"]["home_rad"][12]</span>
+<span class="s">q = row["joint_pos_rad"][servo]</span>
+<span class="s">feature = row["actor_observation"][18]</span>
+<span class="s">action = row["action"][12]</span>
+<span class="s">target = row["target_pos_rad"][12]</span>
+<span class="s">assert abs(feature - (q - home)) &lt; 1e-5</span>
+<span class="s">assert abs(target - (home + action)) &lt; 1e-5</span>
+<span class="s">print({"encoder_rad": q, "home_rad": home, "position_input_18": feature,</span>
+<span class="s">       "raw_action_12": action, "requested_target_rad": target})</span>
+<span class="s">PY_PACKET</span>
+</code></pre></div>
+
+<p>This checks the nominal zero-bias, unit-scale packet. The SDK joint index is <strong>13</strong>, policy action index <strong>12</strong>, position input <strong>18</strong>, velocity input <strong>32</strong> and previous-action input <strong>46</strong>, all zero-based. They differ because the SDK includes the mouth outside the 14-action policy. Never copy the SDK index directly into a policy slot.</p>
+<p><strong>Change one thing on paper:</strong> a +0.01 rad encoder bias adds 0.01 to the position feature and subtracts 0.01 from the requested physical target under this action convention. A photo of a plausible stance would not reveal that mismatch. Try the bias knob in lesson 11 after recording your prediction.</p>
+<h2 id="match-the-actual-interfaces">Match the actual interfaces<a class="headerlink" href="#match-the-actual-interfaces" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Policy quantity</th>
+<th>Standard Duck source and preprocessing</th>
+<th>What to check on your robot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Trunk angular velocity</td>
+<td>IMU gyro converted to rad/s and rotated for the configured board/mount</td>
+<td>Axis order/signs and motion direction</td>
+</tr>
+<tr>
+<td>Projected gravity</td>
+<td>Board-oriented IMU gravity with component-wise three-sample median preprocessing</td>
+<td>Upright direction, tilt response and preprocessing; median is not a fixed transport delay</td>
+</tr>
+<tr>
+<td>Joint position minus home</td>
+<td>Calibrated encoder angle in rad, reordered with mouth excluded</td>
+<td>Servo identity, signs, zero offsets and home pose</td>
+</tr>
+<tr>
+<td>Joint velocity</td>
+<td>Encoder speed converted to rad/s, same joint order</td>
+<td>Units, update cadence and repeated/stale reads</td>
+</tr>
+<tr>
+<td>Previous action</td>
+<td>Last raw 14-value actor output</td>
+<td>Clear feedback on re-enable; do not substitute targets after adding home</td>
+</tr>
+<tr>
+<td>Desired commands</td>
+<td>Forward/left/yaw plus fixed zero head/body slots</td>
+<td>Frames, bounds, operator intent age and zero-command behavior</td>
+</tr>
+<tr>
+<td>Joint target</td>
+<td>Home + scale × raw action, followed by configured runtime filters and limits</td>
+<td>Scale, filter factors, gain and approved calibrated travel</td>
+</tr>
+</tbody>
+</table>
+<p>The critic's simulation-only base velocity and contact information have no place in the deployed actor. The hardware adapter must supply only the actor's 61 inputs. Verify each conversion once, including whether a reported value already includes calibration; subtracting a calibration offset twice changes the controller.</p>
+<h2 id="start-with-read-only-calibration-checks">Start with read-only calibration checks<a class="headerlink" href="#start-with-read-only-calibration-checks" title="Permanent link">¶</a></h2>
+<p>With the actual robot held safely and motor writes disabled by its supported setup, record one hand-moved joint and a slow trunk tilt. Identify the robot/board revision, firmware, bus, IMU mounting, encoder calibration, power conditions and update rate. Compare signs and zero pose with the puppet, then compare named values before constructing the full actor packet.</p>
+<p>Use a record with these columns for each control tick:</p>
+<div class="codehilite"><pre><span></span><code>tick_id, channel, sensor_capture_ns, receive_ns, inference_start_ns,
+inference_end_ns, target_send_ns, source_units, calibrated_value, freshness_status
+</code></pre></div>
+
+<p>Keep unavailable acquisition timestamps empty. A bus-read timestamp is not automatically a sensor-capture timestamp. Shared packet arrival does not establish simultaneous sampling. The same sensor value twice might mean the robot was still; it is not enough to measure sample age.</p>
+<details>
+<summary>Build a timing budget before enabling a policy</summary>
+<pre class="mermaid">flowchart LR
+    Capture[Sensor capture: if available] --&gt; Receive[Transport and receive]
+    Receive --&gt; Assemble[Reorder, calibrate and assemble]
+    Assemble --&gt; Infer[ONNX inference]
+    Infer --&gt; Map[Targets and safety checks]
+    Map --&gt; Send[Motor command write]</pre>
+<p>At 50 Hz the target period is 20 ms. Measure read/assembly/inference/write time and deadline overruns on the robot board. Report capture-to-use age only when the clocks are aligned and the capture timestamp exists. An actor-only workstation benchmark covers just one box.</p>
+<p>Real/sim stance photos and measured board timing are still pending hardware work. Label support conditions in any eventual comparison. The simulated packet exercise above can be completed without those measurements.</p>
+</details>
+<p><strong>Record:</strong> one wrong sign, index, unit or timestamp interpretation that could pass a visual stance check. Next, <a href="11-effects.html">introduce the mismatch deliberately in simulation</a>.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="09-evaluation.html">← 9. Evaluate what you actually care about</a><a href="11-effects.html">11. Turn a reality-gap knob →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/6e3123f088079fce3b585c7362bbf7487b7ed733/docs/locomotion/10-reality-gap.md">View this lesson on GitHub</a> · Snapshot 6e3123f</footer></main></div></body></html>
