@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>11. Turn a reality-gap knob · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
+<link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
+<body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html" aria-current="page">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<main id="main"><article><h1 id="11-turn-a-reality-gap-knob">11. Turn a reality-gap knob<a class="headerlink" href="#11-turn-a-reality-gap-knob" title="Permanent link">¶</a></h1>
+<p>Predict whether adding 40 ms of sensor lag will change the policy's actions. Open the native Newton experiment using an exact checkpoint from your run:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/effects_workshop.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_RUN/model_999.pt
+</code></pre></div>
+
+<p>In <strong>Reality-gap experiment</strong>, change <strong>IMU/dq delay</strong> from zero to two samples and press <strong>Apply and restart trial</strong>. Playback closes while a fresh candidate is recorded, then reopens beside the same baseline ghost. The policy weights and initial mechanical state remain fixed. Editing a slider alone leaves the displayed recording unchanged; pending edits are labeled.</p>
+<p>Pause, scrub, hide the ghost, or switch to side-by-side display. Find the earliest visible divergence. Then choose <strong>Restore nominal settings</strong> and apply again. Every application preserves its settings, log, recording, and comparison under a new <code>trial-…</code> directory. Closing the viewer finishes the workshop.</p>
+<p><img alt="Actual native Newton controls for delay, noise, supply voltage, encoder bias and mechanical play beside the independently recorded baseline ghost and candidate" src="media/effects-workshop.jpg" /></p>
+<p>The image is an offscreen capture of the working native widgets and real recordings. Collapse <strong>Reality-gap experiment</strong> when you want more room for replay controls.</p>
+<p>After recording your own nominal and delayed trials, inspect their coverage in <a href="09-evaluation.html#find-the-failing-condition">the qualification explorer</a>.</p>
+<h2 id="try-one-physical-mechanism">Try one physical mechanism<a class="headerlink" href="#try-one-physical-mechanism" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>What changes</th>
+<th>What to inspect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Target delay</td>
+<td>BAM command history, in 5 ms physics steps</td>
+<td>Requested target versus delayed motor response</td>
+</tr>
+<tr>
+<td>IMU/dq delay</td>
+<td>IMU and joint-velocity histories, in 20 ms samples</td>
+<td>Stale motion readings; position and previous action stay undelayed</td>
+</tr>
+<tr>
+<td>Sensor noise multiplier</td>
+<td>Uniform angular-velocity, gravity, position and velocity noise</td>
+<td>At multiplier 1: bounds ±0.03 rad/s, ±0.01, ±0.001 rad, ±0.25 rad/s respectively</td>
+</tr>
+<tr>
+<td>Fixed battery voltage</td>
+<td>BAM supply voltage, with sag disabled</td>
+<td>Changed available motor response under the same policy</td>
+</tr>
+<tr>
+<td>Encoder bias</td>
+<td>One signed radian offset applied to every encoder, fixed for the trial</td>
+<td>Initial observation offset and the action transform's compensating target offset</td>
+</tr>
+<tr>
+<td>Mechanical gearbox play</td>
+<td>The actual asset with 14 servo joints plus 14 passive hinges, each spanning ±1°</td>
+<td>State-dependent play after reversals; servo and output angle differ</td>
+</tr>
+</tbody>
+</table>
+<p>These are teaching interventions, not measured hardware tolerances. Noise is added when actor observations are computed; the critic stays uncorrupted. Encoder bias is fixed rather than redrawn each step. Battery sag, IMU mounting uncertainty and other hardware effects remain separate mechanisms. The complete settings and cadence are saved in each receipt's <code>effect_settings</code>.</p>
+<p>Every application constructs a fresh trial and clears its histories. Backlash additionally changes the physical topology. The comparison retains all 28 raw coordinates and matches the known output-angle mapping against the nominal robot, requiring zero initial passive displacement and velocity. It cannot hide a different initial motor state behind equal summed output angles.</p>
+<h2 id="watch-a-bounded-reversal">Watch a bounded reversal<a class="headerlink" href="#watch-a-bounded-reversal" title="Permanent link">¶</a></h2>
+<p><strong>Predict:</strong> is gearbox play a delayed target, or a difference between servo and output angle? Try a supported joint without needing a trained policy:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/actuator_workshop.py<span class="w"> </span>--backlash<span class="w"> </span>--output<span class="w"> </span>outputs/play-reversal
+</code></pre></div>
+
+<p>Choose <strong>4 degrees</strong>, then <strong>Reset and run reversal</strong>. Watch the actual target, servo coordinate and passive play; the mechanical output is their sum. Pause or single-step to inspect a reversal. After completion the physical pose is held. Changing the amplitude slider prepares the next run; every run starts from the same reset and is retained in its own <code>trial-…/receipt.json</code>.</p>
+<p><img alt="Actual native actuator controls over a recorded supported Duck pose, showing distinct motor-buffer and actor-feature times, servo and passive angles, and uniquely identified sensor age" src="media/actuator-panel.jpg" /></p>
+<p>This is the working native panel at an actual recorded state: body pose at 1.800 s, motor buffers at 1.795 s, and actor velocity feature sampled at 1.780 s. The capture uses recorded transforms with zero replay physics. Open the live workshop to change the next experiment.</p>
+<p>Now relaunch with <strong>only</strong> <code>--command-delay-ms 20</code> added. Predict which signal shifts. Add <code>--observation-delay-ms 40</code> in another fresh launch to inspect the separate sensor history. The root stays fixed above the floor, all other joints request their reference angles, and no policy is choosing actions. Observation lag therefore changes the displayed actor features without changing this prescribed command program.</p>
+<p><img alt="Four actual simulated head-yaw reversals show requested and delayed targets, servo angle, passive play, and summed mechanical output, including residual position error after the target returns home" src="media/actuator-reversal.jpg" /></p>
+<p>These are simulated 4° sweeps with seed 0: nominal, play alone, both delays without play, and both delays with play. Each retains 600 native physics samples and 150 control samples. All actual servo/root starts match; passive coordinates start at zero. The play coordinate traverses only part of its available clearance here. The asset difference also adds the documented 14 mg; these plots do not measure hardware backlash or qualify walking.</p>
+<p><img alt="Actual target and actor-velocity samples distinguish a 20 ms actuator queue from a 40 ms sensor history, including reset startup and the sawtooth age of a held control decision" src="media/actuator-clocks.jpg" /></p>
+<p><strong>Spot the difference:</strong> the queue receives a frame every 5 ms, even while a control decision is held for 20 ms. After startup its selected frame is 20 ms old, but the originating control decision is 20, 25, 30 or 35 ms old. The velocity feature has its own 20 ms cadence: its uniquely identified age is 0, then 20, then 40 ms in this recording. A repeated or unmatched signal gives <strong>unavailable</strong>, never an invented age. These are simulation-clock identities, not hardware capture/receive timestamps.</p>
+<h2 id="use-a-frozen-experiment-file">Use a frozen experiment file<a class="headerlink" href="#use-a-frozen-experiment-file" title="Permanent link">¶</a></h2>
+<details>
+<summary>What does the backlash coordinate mean?</summary>
+<pre class="mermaid">flowchart LR
+    Servo[Servo hinge: q_s] --&gt; Play[Passive series hinge: q_b in minus 1 to plus 1 degree]
+    Play --&gt; Output[Mechanical output: q_out = q_s + q_b]
+    Output --&gt; Encoder[Modeled encoder reads the summed output]</pre>
+<p>On reversal, the passive hinge can traverse its available clearance before loading the opposite stop. The transmitted motion depends on load, friction and contacts; it is not a fixed number of milliseconds or a constant offset. This is a conceptual mechanism with the exact coordinate mapping used by the known asset. The BAM controller and actor encoder feature use the summed output; the raw receipt preserves each coordinate separately.</p>
+<p><strong>Predict:</strong> after reversing a joint, which should you compare with the target: <code>q_s</code>, <code>q_b</code>, or <code>q_s + q_b</code>? Inspect both servo and output traces before treating a discrepancy as sensor delay.</p>
+</details>
+<p>Save your own settings from the viewer, or create a small JSON file for a headless trial. Unspecified fields use nominal defaults:</p>
+<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>outputs
+<span class="nb">printf</span><span class="w"> </span><span class="s1">'{"observation_delay_ms":40}\n'</span><span class="w"> </span>&gt;<span class="w"> </span>outputs/delay40.json
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/effects_workshop.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_RUN/model_999.pt<span class="w"> </span>--effects<span class="w"> </span>outputs/delay40.json<span class="w"> </span>--record-only<span class="w"> </span>--output<span class="w"> </span>outputs/delay-workshop
+</code></pre></div>
+
+<p>Replace the checkpoint path with your saved model. Use a fresh output directory for each workshop. <code>--headless</code> records and renders without a desktop; <code>--record-only</code> omits rendering. Change one factor, predict the outcome, and compare command response as well as survival. A successful simulated trial does not establish a hardware tolerance.</p>
+<p><img alt="Actual independently simulated baseline ghost and backlash candidate, sharing world coordinates and a fixed command protocol" src="media/ghost-backlash.jpg" /></p>
+<p>This example uses training seed 42 and physical-start seed 0. Both completed 20 seconds; one trial cannot establish robustness. The backlash asset adds 14 tiny passive bodies, totaling 14 mg of authored mass. It is a discrete asset intervention, rather than an identical model with one scalar changed.</p>
+<h2 id="see-what-the-actor-actually-received">See what the actor actually received<a class="headerlink" href="#see-what-the-actor-actually-received" title="Permanent link">¶</a></h2>
+<p><strong>Predict:</strong> with a configured 40 ms lag, are both IMU channels already two samples old immediately after reset?</p>
+<p><img alt="Actual simulated gyro and ankle-velocity readings compared with actor inputs, plus requested targets and servo positions; the delayed policy falls at 1.8 seconds" src="media/signal-delay40.jpg" /></p>
+<p>The actor's ankle-velocity input matches the physical value from two control samples earlier after warmup. The IMU has its own startup rule: gyro and gravity delays begin at zero, then change on separate update phases. In this recording, the first gyro/raw difference occurs at 0.88 s and the first gravity/raw difference at 0.64 s. A configured lag alone does not describe the age of every initial sample. This policy fell at 1.80 s during the initial standing segment, before any walking command.</p>
+<p>The black trace is the <strong>requested</strong> angle, and the blue trace is the measured servo angle. They differ because an actuator has dynamics and limits. The requested target is not a measured delayed/applied target; these control-boundary samples do not expose every 5 ms actuator step. With the backlash asset, the plot additionally shows servo angle plus passive play as the mechanical output.</p>
+<p>These are simulation timestamps. Sensor capture, transport, receive and motor-application timestamps on the real robot still need hardware measurement.</p>
+<details>
+<summary>Inspect delay clocks and the smaller delay-only launcher</summary>
+<p>Predict the effect of a 40 ms observation delay. Choose the exact saved checkpoint from your run directory, then record matching trials and open the ghost viewer:</p>
+<p>The <a href="09-evaluation.html#find-the-failing-condition">qualification explorer</a> compares your recorded outcomes; the ghost below helps inspect how their motions diverged.</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/reality_gap.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_RUN/model_49.pt<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span>
+</code></pre></div>
+
+<p>Use the same exact checkpoint, seed, and commands. The script changes IMU and joint-velocity observation lag; joint-position and previous-action channels are unchanged. It is a specific sensor-delay experiment, not a claim that every input is delayed.</p>
+<p>Two independent simulator processes produce the baseline and changed-condition receipts. The blue translucent ghost is the baseline; the solid duck is the changed-condition trial. Their initial base pose, joint pose/order, seed, time step, horizon, and command sequence must match. Each policy remains in closed loop, so observations and actions can diverge after the initial state.</p>
+<p><strong>Play:</strong> pause, scrub recorded time, take one step, hide the ghost, change its opacity, and switch between a world overlay and side-by-side display. Ground trails retain drift. When one trial ends, its last recorded pre-reset pose stays visible and the panel marks the ending; the other trial continues. Scrubbing advances no physics. The ghost has no colliders or solver and cannot support or knock over the candidate.</p>
+<p>The viewer controls change the display of recorded trials. To try another physical delay, rerun the command with a new value. Delay buffers are constructed for each trial; a display slider does not silently reconfigure an active simulator. Add <code>--headless</code> to record and render without a desktop, or <code>--record-only</code> to save trials without playback.</p>
+<p>Replay an existing pair without repeating simulation:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/compare.py<span class="w"> </span>--reference<span class="w"> </span>outputs/reality-gap/reference/receipt.json<span class="w"> </span>--candidate<span class="w"> </span>outputs/reality-gap/candidate/receipt.json
+</code></pre></div>
+
+<p>Command delay is separate. Try <code>--command-delay-ms 20</code>: it delays actuator targets by four 5 ms physics steps. A 40 ms observation delay spans two 20 ms samples. Converting both from the same step count would be wrong. Histories have startup/reset behavior; inspect and verify it before interpreting the first samples as steady-state latency.</p>
+<p>Backlash is state-dependent mechanical play, particularly visible after reversals. It differs from fixed encoder bias, random noise, an action deadband, and pure delay. The maintained transfer task offers a backlash asset through <code>presets=backlash</code>; that changes the asset/observation mapping and requires scene reconstruction. The effects workshop reconstructs the scene when this selection changes.</p>
+<p>In one exploratory run (4096 environments, 1000 PPO iterations, training seed 42, evaluation seed 0), the baseline completed 20 seconds while the 40 ms delayed trial fell after 1.62 seconds. This illustrates sensitivity for that saved policy; repeat across independent training/evaluation seeds before drawing a robustness conclusion.</p>
+<p><img alt="Native ghost playback: the baseline remains upright; the delayed candidate's last pre-fall pose is held" src="media/ghost-delay.jpg" /></p>
+<p>The image uses a constant side-by-side display offset. Both recorded world paths remain intact.</p>
+<p><img alt="Measured command tracking over the full attempted horizon, with the candidate stopping at its early fall" src="media/tracking-delay.jpg" /></p>
+<p>Regenerate the chart from a new matched pair:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/plot_comparison.py<span class="w"> </span>--reference<span class="w"> </span>outputs/reality-gap/reference/receipt.json<span class="w"> </span>--candidate<span class="w"> </span>outputs/reality-gap/candidate/receipt.json
+</code></pre></div>
+
+<p><strong>Record:</strong> which signals were delayed, the delay in milliseconds and samples, and whether the policy survived long enough for the change to be interpretable.</p>
+</details></article><nav class="pagination" aria-label="Previous and next lesson"><a href="10-reality-gap.html">← 10. Which simulation signals exist on the robot?</a><a href="12-robustness.html">12. Teach the duck about uncertainty →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/11-effects.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>

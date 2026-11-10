@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2. Try training before studying the recipe · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
+<link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
+<body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html" aria-current="page">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<main id="main"><article><h1 id="2-try-training-before-studying-the-recipe">2. Try training before studying the recipe<a class="headerlink" href="#2-try-training-before-studying-the-recipe" title="Permanent link">¶</a></h1>
+<p><strong>Question:</strong> what can the duck learn from a short attempt?</p>
+<h2 id="set-up">Set up<a class="headerlink" href="#set-up" title="Permanent link">¶</a></h2>
+<p>Run from the repository root:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>sync<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>--locked
+</code></pre></div>
+
+<p>This creates a separate environment and leaves the root SO-101 lock file unchanged. The locomotion lock pins Isaac Lab commit <code>90a16f06685dbf7948262eafa628c470b4cdc78c</code>, Newton commit <code>42f7def118c2c4299ce493457bafd4e8a22a696e</code>, RSL-RL 5.5.1, and MuJoCo/MuJoCo Warp 3.15. The environment builds Isaac Lab through its supported aggregate wheel builder so runtime resources are included. Its source revision differs from the root released-wheel setup.</p>
+<h2 id="run-a-fresh-attempt">Run a fresh attempt<a class="headerlink" href="#run-a-fresh-attempt" title="Permanent link">¶</a></h2>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>isaaclab<span class="w"> </span>train<span class="w"> </span>--rl_library<span class="w"> </span>rsl_rl<span class="w"> </span>--task<span class="w"> </span>MicroDuckTutorial-Velocity-Flat<span class="w"> </span>--num_envs<span class="w"> </span><span class="m">128</span><span class="w"> </span>--max_iterations<span class="w"> </span><span class="m">50</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--run_name<span class="w"> </span>first_attempt<span class="w"> </span>--visualizer<span class="w"> </span>none
+</code></pre></div>
+
+<p>The project supplies a complete task so you can run before understanding every manager term. This command starts a fresh learner. It does not load a supplied successful policy.</p>
+<details>
+<summary>Where does that command get its settings?</summary>
+<pre class="mermaid">flowchart TD
+    CLI[isaaclab train: task ID and CLI overrides] --&gt; Registry[config/microduck/__init__.py: task registry]
+    Registry --&gt; Env[config/microduck/env_cfg.py: NominalEnvCfg]
+    Registry --&gt; Agent[config/microduck/agents/rsl_rl_ppo_cfg.py: PPORunnerCfg]
+    Env --&gt; Terms[Scene, actions, observations, rewards, resets]
+    Terms --&gt; Run[Parallel simulation and learning]
+    Agent --&gt; Run
+    Run --&gt; Files[logs/rsl_rl/microduck_tutorial/run directory]
+    Files --&gt; Params[params/env.yaml and agent.yaml]
+    Files --&gt; Checkpoint[model_N.pt, run.json and TensorBoard events]</pre>
+<p>Config filenames above are relative to <code>src/isaaclab_tutorial/tasks/locomotion/</code>. Generated logs are relative to the repository root. The resolved YAML files capture the settings used, including your overrides. Keep them with the checkpoint; a model file alone does not describe its observation or actuator contract. The robot USD bytes are checked before scene construction.</p>
+</details>
+<p>The budget is 128 environments × 24 control steps × 50 iterations = <strong>153,600 transitions</strong>. It is a teaching preview, not a promise to learn walking. Compilation and asset download can dominate the first launch. If memory is limited, reduce <code>--num_envs</code>; record the changed transition budget.</p>
+<p>Find the printed run directory under <code>logs/rsl_rl/microduck_tutorial/</code>. Checkpoints are written at the configured interval and at the end. Iterations, episode duration, tracking errors, and fall terminations are more useful together than reward alone.</p>
+<details>
+<summary>Verify that the nominal task is registered</summary>
+<p>From the <strong>IsaacLabTutorial repository root</strong>, run:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>--locked<span class="w"> </span>isaaclab<span class="w"> </span>list_envs<span class="w"> </span>--keyword<span class="w"> </span>MicroDuckTutorial-Velocity-Flat
+</code></pre></div>
+
+<p>The actual nominal row from the pinned environment is shown as field/value pairs for readability:</p>
+<div class="codehilite"><pre><span></span><code>Task Name: MicroDuckTutorial-Velocity-Flat
+Entry Point: isaaclab.envs:ManagerBasedRLEnv
+Config: isaaclab_tutorial.tasks.locomotion.config.microduck.env_cfg:NominalEnvCfg
+RL Libraries: rsl_rl
+</code></pre></div>
+
+<p>Other matching task rows also appear. Registration alone does not launch simulation; use the nominal task for this first PPO attempt.</p>
+</details>
+<h2 id="replay-what-you-actually-trained">Replay what you actually trained<a class="headerlink" href="#replay-what-you-actually-trained" title="Permanent link">¶</a></h2>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span>latest<span class="w"> </span>--capture
+</code></pre></div>
+
+<p>This attempts the fixed command protocol and stops at the first fall or timeout. It writes <code>outputs/evaluation/receipt.json</code> and a pre-fall image. A native window is optional: add <code>--viewer</code> on a graphical desktop. <code>latest</code> selects the latest run whose <code>run.json</code> identifies the nominal tutorial task, then its highest-numbered checkpoint. An explicitly chosen checkpoint must also belong to that task. For controlled comparisons, pass its exact path so a training job cannot move the selection between trials.</p>
+<p><strong>Look for:</strong> finite learning diagnostics, a real checkpoint, and its actual behavior. Falling, drifting, or barely moving are valid learning observations. A traceback, non-finite state, or missing checkpoint is a software/setup failure to diagnose.</p>
+<p><strong>Record:</strong> “My first policy …; the episode ended because ….”</p>
+<details>
+<summary>See one actual short attempt</summary>
+<p><img alt="The actual 128-environment, 50-iteration policy's final recorded pose: it fell at 5.14 seconds after 153600 fresh transitions, and the replay explicitly holds its last pre-reset sample" src="media/first-attempt.jpg" /></p>
+<p><a href="https://github.com/AntoineRichard/IsaacLabTutorial/releases/download/microduck-tutorial-media-3463b86/first-attempt.mp4">Watch the native movie</a>.</p>
+<p>This fresh seed-42 run collected 153,600 transitions and made 1,000 optimizer steps. Its frozen policy fell at 5.14 s in the nominal fixed-command test, covering 25.7% of the intended 20 seconds. The shown replay holds the last recorded pre-reset pose at 5.12 s; no physics continues after the episode ends. This is the short learner's own result. The larger walking policy is a separate run.</p>
+<p>Open <a href="08-training.html#open-the-investigator">its actual training curves and replay information</a> when you reach lesson 8. Your run can differ; keep its own result.</p>
+</details>
+<p>Do not wait for a good gait before moving on. Next, <a href="03-puppet.html">control the puppet duck yourself</a>.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="index.html">← Play, train, and understand Microduck</a><a href="03-puppet.html">3. Play with a puppet duck →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/02-first-training.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>

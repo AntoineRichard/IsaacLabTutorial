@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3. Play with a puppet duck · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
+<link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
+<body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html" aria-current="page">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<main id="main"><article><h1 id="3-play-with-a-puppet-duck">3. Play with a puppet duck<a class="headerlink" href="#3-play-with-a-puppet-duck" title="Permanent link">¶</a></h1>
+<p><strong>Challenge:</strong> make Microduck look left, crouch, or lift one foot.</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/playground.py
+</code></pre></div>
+
+<details>
+<summary>See the joint controls</summary>
+<p><img alt="Native Newton panel showing all 14 named joint sliders in left-leg, right-leg and head groups, with target and measured angles beside a supported Microduck" src="media/puppet-panel.jpg" /></p>
+<p>This reference image renders an actual recorded state at 0.92 s using the same widgets as the live workshop. The root is fixed for this supported experiment; the feet need not touch the floor. The gold marker shows the recorded gravity direction. Run the command above to change targets and observe new physics.</p>
+</details>
+<p>Open <strong>Microduck playground</strong> in the Newton sidebar. The head/neck group starts open; expand either leg to see its joints. Sliders display degrees; the simulation receives radians. Each joint has a target and a measured angle.</p>
+<p>The default <strong>Supported pose</strong> fixes the root above the floor so you can inspect motion without balancing. It is an inspection configuration, not a trained locomotion task. The feet hanging clear of the ground are intentional.</p>
+<p>Move <code>head_yaw</code>, then a knee. Predict the direction first. The slider sends a target through the real BAM actuator model; it does not teleport the joint. The measured angle may lag or settle away from the target.</p>
+<p>Try this three-move challenge:</p>
+<ol>
+<li>Move <code>head_yaw</code> to about 11°. Wait for the measured angle to settle.</li>
+<li>Pause, request a different angle, and press <strong>Single control step</strong>. Does one 20 ms interval reach the target?</li>
+<li>Press <strong>Restore stance</strong>, then <strong>Reset experiment</strong>. The first changes requested targets; the second also resets physical state and controller histories.</li>
+</ol>
+<p><strong>Pause playground</strong> freezes control stepping while preserving viewer interaction. <strong>Save experiment</strong> writes named targets and timing to <code>outputs/playground/experiment.json</code>.</p>
+<h2 id="find-the-hinge-before-moving-it">Find the hinge before moving it<a class="headerlink" href="#find-the-hinge-before-moving-it" title="Permanent link">¶</a></h2>
+<p>Pick <code>left_knee</code> or <code>head_yaw</code> on the joint plate below. Predict its positive direction, then make a small slider change. The plate maps the actual hinges to the 14 action slots and distinguishes the world and trunk-base frames.</p>
+<p><img alt="Joint and frame plate for the Microduck action order" src="media/reference-joints.jpg" /></p>
+<p><strong>Try another view:</strong> toggle <strong>Show Collision</strong> and <strong>Show Visual</strong> in Newton's <strong>Visualization</strong> section. Only the sole shapes are active robot colliders in this walking asset. Compare them with the visible meshes before removing support.</p>
+<h2 id="remove-support">Remove support<a class="headerlink" href="#remove-support" title="Permanent link">¶</a></h2>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/playground.py<span class="w"> </span>--free
+</code></pre></div>
+
+<p>This launches a separate free-base scene. Try a small knee change. A pose that looked reasonable while supported may fall when it has to balance. Reset and try again; this activity is not a recovery controller.</p>
+<p>At the first fall or time limit, the playground holds the final physical pose and labels the ending. Stepping is disabled until <strong>Reset experiment</strong> starts a new trial. The display does not present an automatic reset as continued balancing.</p>
+<h2 id="no-graphical-desktop">No graphical desktop<a class="headerlink" href="#no-graphical-desktop" title="Permanent link">¶</a></h2>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/playground.py<span class="w"> </span>--headless<span class="w"> </span>--steps<span class="w"> </span><span class="m">120</span><span class="w"> </span>--scripted<span class="w"> </span>--capture
+</code></pre></div>
+
+<p>The same actuator/control path requests a 0.2 rad head-yaw change halfway through, then resets at 80% of the run. Inspect <code>outputs/playground/receipt.json</code> and <code>playground.png</code>. The receipt records the gradual measured response, one explicit reset, and 61/76 actor/critic values. The capture is a simulator view, not proof of clicking a live desktop widget.</p>
+<p><img alt="Supported Microduck with feet clear of the ground in the real Newton simulation" src="media/puppet-supported.jpg" /></p>
+<p>The fixed root makes this a useful joint experiment. Its hanging feet are not evidence that a policy learned to balance.</p>
+<p><img alt="Measured head-yaw response approaches a 0.2 rad request gradually, then returns to zero at an explicit reset" src="media/puppet-response.jpg" /></p>
+<p>This real 60-step capture requests the turn at 0.6 s and resets at 0.96 s. The motor has not quite reached its target before the reset. To plot your own named joint:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/plot_playground.py<span class="w"> </span>--receipt<span class="w"> </span>outputs/playground/receipt.json<span class="w"> </span>--joint<span class="w"> </span>head_yaw<span class="w"> </span>--output<span class="w"> </span>outputs/playground/head-yaw.svg
+</code></pre></div>
+
+<p><strong>Check yourself:</strong> why can a target slider move before the measured joint reaches it? The policy/controller requests a target; the motor, inertia, limits, and contacts determine the physical response.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="02-first-training.html">← 2. Try training before studying the recipe</a><a href="04-actions.html">4. Follow one action into the robot →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/03-puppet.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>

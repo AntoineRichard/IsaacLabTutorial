@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>7. Explain the training run you already launched · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
+<link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
+<body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html" aria-current="page">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<main id="main"><article><h1 id="7-explain-the-training-run-you-already-launched">7. Explain the training run you already launched<a class="headerlink" href="#7-explain-the-training-run-you-already-launched" title="Permanent link">¶</a></h1>
+<p><strong>Two-minute challenge:</strong> open the <a href="08-training.html#open-the-investigator">training investigator</a>. Predict the effect of doubling the number of parallel ducks, then try its budget control. A calculation you can check makes the PPO recipe easier to read.</p>
+<p>Find the first run's environment count, rollout horizon, and iteration number. The teaching preview uses 128 ducks, 24 control steps per rollout, and 50 iterations. Each control step lasts 20 ms; the physics runs four 5 ms substeps inside it.</p>
+<pre class="mermaid">flowchart LR
+    P[Current stochastic actor] --&gt; R[Collect N × H transitions]
+    R --&gt; V[Critic: estimate returns and advantages]
+    V --&gt; U[Optimize minibatches for E epochs]
+    U --&gt; P
+    U --&gt; C[Save a checkpoint]
+    C --&gt; F[Freeze actor for driving and evaluation]</pre>
+
+<p>The loop returns to fresh simulation experience after the limited update phase. In the frozen driving/evaluation branch, there are no optimizer steps.</p>
+<p>PPO repeats four operations: collect a recent rollout with the current stochastic actor; estimate returns and advantages with the critic; update actor and critic for a limited number of minibatch epochs; collect fresh experience.</p>
+<p>An advantage estimates whether an action worked better than expected from its state. Positive advantage encourages that action; negative advantage discourages it. The probability ratio compares its likelihood under the candidate and rollout policies. PPO clips the surrogate objective to limit the incentive for large changes. Clipping is not a guarantee that every action probability stays inside a hard interval.</p>
+<p><strong>Predict before opening:</strong> for a positive advantage, does making an action twice as likely keep improving the clipped objective? What changes for a negative advantage?</p>
+<details>
+<summary>Inspect the actual objective shape</summary>
+<p><img alt="Analytic PPO objective: positive advantages flatten above ratio 1.2, while negative advantages flatten below 0.8; the unclipped objective remains a straight line" src="media/ppo-objective.jpg" /></p>
+<p>The plot maximizes <code>min(r × A, clip(r, 1 − ε, 1 + ε) × A)</code>, using <code>ε = 0.2</code> and illustrative advantages <code>A = +1</code> and <code>A = −1</code>. Here <code>r = exp(new_log_probability − rollout_log_probability)</code>. RSL-RL minimizes the negative of this expression. These are analytic curves, not training measurements. The clipped and unclipped lines overlap on the side where the objective still discourages a harmful change.</p>
+</details>
+<details>
+<summary>Work through one advantage building block</summary>
+<p>For an illustrative transition with reward <code>r = 0.3</code>, value <code>V(s) = 1.0</code>, next value <code>V(s') = 0.9</code>, and discount <code>γ = 0.99</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Transition</th>
+<th>Next-value bootstrap</th>
+<th>One-step TD residual</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ordinary continuing step</td>
+<td><code>0.99 × 0.9</code></td>
+<td><code>0.3 + 0.891 − 1.0 = 0.191</code></td>
+</tr>
+<tr>
+<td>True terminal fall</td>
+<td><code>0</code></td>
+<td><code>0.3 − 1.0 = −0.7</code></td>
+</tr>
+<tr>
+<td>Time limit in this pinned runner</td>
+<td>Add <code>0.99 × V(s) = 0.99</code> to reward</td>
+<td><code>0.3 + 0.99 − 1.0 = 0.29</code></td>
+</tr>
+</tbody>
+</table>
+<p>The residual compares a one-step target with the critic's previous estimate. GAE combines residuals across multiple steps using <code>γ</code> and <code>λ</code>; this table is not the full GAE calculation. For this continuing task, RSL-RL 5.5.1 handles <code>time_outs</code> by adding <code>γ × V(s)</code> from the stored pre-step value to the reward, an approximation to bootstrapping the final pre-reset state. True terminations receive no such addition. Do not describe that implementation as evaluating the final observation or bootstrap from an already reset state. The evaluator separately preserves the physical terminal state for diagnosis.</p>
+</details>
+<p>The value loss trains the critic; entropy encourages exploration; gradient clipping limits an optimizer step. The configured horizon and number of parallel environments determine the rollout size. Epochs/minibatches reuse that recent rollout without creating additional environment transitions.</p>
+<details>
+<summary>Follow a fall and a time limit through reset</summary>
+<pre class="mermaid">flowchart TD
+    Step[Physics step and reward] --&gt; End{Episode ending?}
+    End --&gt;|No| Continue[Record transition and continue]
+    End --&gt;|Fall or time limit| Final[Preserve pre-reset state and ending flags]
+    Final --&gt; Reset[Reset physical state and observation/action histories]
+    Reset --&gt; New[First observation of the new episode]
+    Final --&gt; Flags[Send termination and truncation flags to runner]
+    Flags --&gt;|Fall| Terminal[No continuing-value addition]
+    Flags --&gt;|Time limit| Timeout[Add discounted stored pre-step value to that transition reward]</pre>
+<p>The evaluator holds the first failed pose rather than letting autoreset conceal it. During training, the environment autoresets before returning observations to the runner. Ending flags preserve the distinction; the time-limit addition uses the runner's stored pre-step value, not the new reset state's value. See the numerical example above for this pinned runner's approximation.</p>
+</details>
+<p>The maintained PPO recipe uses 24 control steps per environment, discount 0.99, GAE lambda 0.95, clip parameter 0.2, five learning epochs, and four minibatches. A rollout of 128 × 24 contains 3,072 transitions. Fifty iterations collect 153,600 transitions, regardless of how many optimizer minibatches reuse them.</p>
+<p>Each epoch splits the rollout into four minibatches of 768 samples. Five epochs give 20 optimizer steps per iteration, or 1,000 over the preview run. The optimizer jointly updates actor and critic; those are not two separate counts of fresh experience. The investigator reads optimizer counters from the actual saved checkpoint alongside the arithmetic prediction.</p>
+<p><strong>Experiment:</strong> change only the number of environments in a new short run. Predict the new experience budget and memory use direction. A changed transition budget is a changed experiment; do not call it an equal-data comparison.</p>
+<p><strong>Check yourself:</strong> why do we collect fresh data after the PPO updates? PPO learns from recent experience sampled by its rollout policy; indefinitely reusing old data changes that relationship.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="06-rewards.html">← 6. Can a better score hide worse walking?</a><a href="08-training.html">8. Investigate the first attempt →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/07-ppo.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>

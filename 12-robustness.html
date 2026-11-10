@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>12. Teach the duck about uncertainty · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
+<link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
+<body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html" aria-current="page">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<main id="main"><article><h1 id="12-teach-the-duck-about-uncertainty">12. Teach the duck about uncertainty<a class="headerlink" href="#12-teach-the-duck-about-uncertainty" title="Permanent link">¶</a></h1>
+<p>Use <a href="09-evaluation.html#find-the-failing-condition">the qualification explorer</a> to find a condition where your frozen policy struggles. Predict whether training with varied lag will help. Start a bounded fresh delay-trained policy:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>isaaclab<span class="w"> </span>train<span class="w"> </span>--rl_library<span class="w"> </span>rsl_rl<span class="w"> </span>--task<span class="w"> </span>MicroDuckTutorial-Velocity-Flat-Delay<span class="w"> </span>--num_envs<span class="w"> </span><span class="m">128</span><span class="w"> </span>--max_iterations<span class="w"> </span><span class="m">50</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--run_name<span class="w"> </span>delay_preview<span class="w"> </span>--visualizer<span class="w"> </span>none
+</code></pre></div>
+
+<p>Replay its exact saved checkpoint with <code>--training-profile delay</code>. A short run can fail before reaching the walking commands; keep that result. The profile flag checks the saved training task and complete environment configuration before reconstructing the chosen evaluation conditions. Equal tensor widths alone do not qualify a checkpoint.</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--training-profile<span class="w"> </span>delay<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_DELAY_RUN/model_49.pt<span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/delay-trained-check
+</code></pre></div>
+
+<h2 id="change-the-training-distribution-keep-the-test-fixed">Change the training distribution, keep the test fixed<a class="headerlink" href="#change-the-training-distribution-keep-the-test-fixed" title="Permanent link">¶</a></h2>
+<p>Use the same physical-start seed, command schedule, and test condition for each policy. Training randomization and evaluation intervention are different inputs:</p>
+<pre class="mermaid">flowchart LR
+    D[Sample the declared training delays] --&gt; L[Collect experience and update PPO]
+    L --&gt; P[Freeze the learned policy]
+    C[Choose a fixed test condition and physical start] --&gt; E[Run independent evaluation]
+    P --&gt; E
+    E --&gt; R[Keep response, coverage, falls and invalid attempts]</pre>
+
+<p>The controlled configurations form a two-factor comparison:</p>
+<table>
+<thead>
+<tr>
+<th>Training profile</th>
+<th>Task suffix</th>
+<th>Robot</th>
+<th>Training delays</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nominal</code></td>
+<td>none</td>
+<td>Nominal asset</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>delay</code></td>
+<td><code>-Delay</code></td>
+<td>Nominal asset</td>
+<td>Targets 0–30 ms; IMU/dq 0–40 ms</td>
+</tr>
+<tr>
+<td><code>backlash</code></td>
+<td><code>-Backlash</code></td>
+<td>Known series-play asset</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>combined</code></td>
+<td><code>-Combined</code></td>
+<td>Known series-play asset</td>
+<td>Same delays as <code>delay</code></td>
+</tr>
+</tbody>
+</table>
+<p>All four retain the same PPO defaults, reward weights, commands, control timing and actor information. Noise, encoder bias, supply variation, mass/friction randomization, pushes and curricula stay disabled in this comparison. The backlash factor selects the complete known asset, including its tiny additional passive-body masses.</p>
+<p>Target lag is an integer draw in 5 ms physics steps, redrawn every physics step. Joint-velocity lag is an integer draw in 20 ms samples, held until episode reset. IMU gyro/gravity lags have separate phases and are redrawn every 64 control samples. Startup history can still return fresher data. These are declared teaching distributions, not measured hardware timing tolerances.</p>
+<p>Forty milliseconds lies inside the sensor-delay training range. Success there tests interpolation under a fixed condition; it does not establish extrapolation to longer delays. Try 60 ms as a separately declared test after inspecting the in-range result.</p>
+<h2 id="compare-policies-under-the-same-test">Compare policies under the same test<a class="headerlink" href="#compare-policies-under-the-same-test" title="Permanent link">¶</a></h2>
+<p>Before looking at the example below, predict whether delay training helps under fixed 40 ms sensor lag. Will it preserve nominal behavior? Will training both mechanisms necessarily handle both better?</p>
+<p>Evaluate the nominal and delay-trained policies under the same start and fixed lag, keeping distinct output directories:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_NOMINAL_RUN/model_49.pt<span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/nominal-under-lag
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/evaluate.py<span class="w"> </span>--training-profile<span class="w"> </span>delay<span class="w"> </span>--checkpoint<span class="w"> </span>logs/rsl_rl/microduck_tutorial/YOUR_DELAY_RUN/model_49.pt<span class="w"> </span>--start-protocol<span class="w"> </span>balance-starts-v1<span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--observation-delay-ms<span class="w"> </span><span class="m">40</span><span class="w"> </span>--output<span class="w"> </span>outputs/delay-under-lag
+uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/compare.py<span class="w"> </span>--reference<span class="w"> </span>outputs/nominal-under-lag/receipt.json<span class="w"> </span>--candidate<span class="w"> </span>outputs/delay-under-lag/receipt.json
+</code></pre></div>
+
+<p>Replace both paths with your saved checkpoints. Compare command response, coverage and falls, then repeat without the lag. Use equal completed transition budgets when comparing training recipes. For a broader comparison, train at least three independent seeds per profile and use <code>qualify.py --training-profile PROFILE</code> under identical evaluation starts and conditions. Use a separate report per training profile and test condition.</p>
+<p>Keep failed and invalid attempts in the outcome counts. Full-trial tracking error stays unavailable when no trial completes. Improving one fixed test while losing nominal walking is a tradeoff to investigate, not automatic progress toward transfer.</p>
+<h2 id="look-at-the-learned-difference">Look at the learned difference<a class="headerlink" href="#look-at-the-learned-difference" title="Permanent link">¶</a></h2>
+<p>In <a href="11-effects.html">the native effects workshop</a>, pass <code>--training-profile delay</code> (or <code>backlash</code>/<code>combined</code>) with that policy's exact checkpoint. The same frozen policy then encounters different evaluation conditions. To compare two separately trained policies, evaluate both with the same effect file and start, then pass their two receipts to <code>compare.py</code>. Keep both objectives and independent task metrics visible.</p>
+<p><img alt="Actual matched-start comparison under 40 ms sensor lag: the blue nominal-policy ghost holds its fallen pose while the solid delay-trained duck completes the commands" src="media/robust-training-ghost.jpg" /></p>
+<p>This pair uses training seed 42 and physical-start seed 0. Both policies experienced the same 40 ms sensor lag. The nominal policy fell at 1.84 s; the delay-trained policy completed 20 s and qualified. Both recorded world paths remain intact. Use the viewer's pause/scrub controls to find where the closed-loop responses diverged.</p>
+<details>
+<summary>Inspect the same trials as a native-time ghost comparison</summary>
+<p><img alt="At 14 seconds the blue nominal-trained ghost holds its final fallen pose and its own 1.82-second readings, while the white delay-trained candidate follows the lateral command; both retain original world coordinates" src="media/stress-comparison.jpg" /></p>
+<p><a href="https://github.com/AntoineRichard/IsaacLabTutorial/releases/download/microduck-tutorial-media-3463b86/stress-comparison.mp4">Watch the native movie</a>.</p>
+<p>This poster comes from a new 20-second, 1,000-frame movie of those exact receipts at their native 50 Hz cadence. The blue actor has no collision participation. Its final pre-reset pose and readings are explicitly held after the fall; they are not a prediction of later behavior. The white actor replays body poses from its own independent closed-loop trial. The camera stays fixed, without translating either trajectory.</p>
+<p>Playback advances no physics. Use the interactive comparison above to pause and scrub your own trials.</p>
+</details>
+<details>
+<summary>Beyond this controlled ablation</summary>
+<p>The maintained full transfer task introduces additional uncertainty and curricula:</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>isaaclab<span class="w"> </span>train<span class="w"> </span>--rl_library<span class="w"> </span>rsl_rl<span class="w"> </span>--task<span class="w"> </span>MicroDuckTutorial-Velocity-Flat-Transfer<span class="w"> </span>--num_envs<span class="w"> </span><span class="m">128</span><span class="w"> </span>--max_iterations<span class="w"> </span><span class="m">50</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--run_name<span class="w"> </span>transfer_preview<span class="w"> </span>--visualizer<span class="w"> </span>none<span class="w"> </span><span class="nv">presets</span><span class="o">=</span>backlash
+</code></pre></div>
+
+<p>This is a separate bounded execution preview. Its masses, friction, motor/sensor effects, pushes and curricula do not constitute the same two-factor experiment. Its checkpoint requires its own declared evaluator contract; the controlled-profile flag does not admit it. Record each parameter's units, bounds, sampling cadence, measurement or justification, and schedule before drawing a transfer claim.</p>
+<p>Observation history is another explicit architecture experiment: it changes inputs, reset state and deployment requirements. Add it during training and verify the matching export/runtime rather than adding it only on the robot.</p>
+</details>
+<p><strong>Record:</strong> which uncertainty was sampled per robot, per episode or over time, and whether the candidate improved the same held-fixed test without losing nominal behavior.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="11-effects.html">← 11. Turn a reality-gap knob</a><a href="13-deployment.html">13. Export without changing the policy →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/12-robustness.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>

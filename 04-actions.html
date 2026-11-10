@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>4. Follow one action into the robot · Microduck locomotion</title><meta name="description" content="A hands-on tutorial for flat-ground PPO locomotion, Sim2Real and ONNX deployment with Microduck.">
+<link rel="stylesheet" href="assets/site.css"><script defer src="assets/mermaid.min.js"></script><script defer src="assets/site.js"></script></head>
+<body><header><a class="brand" href="index.html">Microduck <span>Locomotion lab</span></a><a class="source" href="https://github.com/isaac-sim/IsaacLabTutorial/pull/28">View tutorial PR ↗</a></header>
+<div class="layout"><aside><details class="navigation" open><summary>Lessons</summary><nav aria-label="Lessons"><a href="index.html">Play, train, and understand Microduck</a><a href="02-first-training.html">2. Try training before studying the recipe</a><a href="03-puppet.html">3. Play with a puppet duck</a><a href="04-actions.html" aria-current="page">4. Follow one action into the robot</a><a href="05-observations.html">5. Become an observation detective</a><a href="06-rewards.html">6. Can a better score hide worse walking?</a><a href="07-ppo.html">7. Explain the training run you already launched</a><a href="08-training.html">8. Investigate the first attempt</a><a href="09-evaluation.html">9. Evaluate what you actually care about</a><a href="10-reality-gap.html">10. Which simulation signals exist on the robot?</a><a href="11-effects.html">11. Turn a reality-gap knob</a><a href="12-robustness.html">12. Teach the duck about uncertainty</a><a href="13-deployment.html">13. Export without changing the policy</a></nav></details></aside>
+<main id="main"><article><h1 id="4-follow-one-action-into-the-robot">4. Follow one action into the robot<a class="headerlink" href="#4-follow-one-action-into-the-robot" title="Permanent link">¶</a></h1>
+<p><strong>Try:</strong> open a supported head-yaw experiment. No checkpoint is needed.</p>
+<div class="codehilite"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>environments/locomotion<span class="w"> </span>python<span class="w"> </span>scripts/locomotion/actuator_workshop.py<span class="w"> </span>--output<span class="w"> </span>outputs/my-reversal
+</code></pre></div>
+
+<p>In <strong>Supported actuator workshop</strong>, choose a small amplitude and press <strong>Reset and run reversal</strong>. The duck holds, sweeps, reverses, then returns its target home over three simulated seconds. Compare requested target, actual delayed target and measured servo angle in the native viewer's live plots. Pause at a control boundary or take a single control step. Try another amplitude; it applies to the next run, which is saved separately.</p>
+<p><strong>Predict:</strong> when the target returns home, must the joint already be home? The motor has dynamics and friction. The slider requests motion; it does not prescribe the measured trajectory. <a href="11-effects.html#watch-a-bounded-reversal">Add delay and mechanical play</a> once you can identify these signals. Add <code>--headless</code> to record one complete trial without a viewer.</p>
+<p>The tutorial preserves the robot's explicit 14-servo order: five left-leg joints, four head/neck joints, then five right-leg joints. The asset's internal order can differ. Selecting by name with <code>preserve_order=True</code> keeps observations and actions consistent.</p>
+<p>For the selected action term:</p>
+<div class="codehilite"><pre><span></span><code>target = default_joint_position + scale × action − encoder_bias
+</code></pre></div>
+
+<p>The puppet inverts this mapping to turn your desired physical angle into a policy-shaped action. In nominal conditions the encoder bias is zero and the scale is one. A zero action therefore requests the reference stance; it does not mean zero torque or zero angle.</p>
+<p>Physics advances every 5 ms (200 Hz). The policy/control interval contains four physics steps, so actions update every 20 ms (50 Hz). A held position target is still processed by the actuator during the intervening physics steps.</p>
+<pre class="mermaid">flowchart LR
+    A[One raw policy action] --&gt; Scale[Multiply by configured scale]
+    Scale --&gt; Home[Add home angle, subtract encoder bias]
+    Home --&gt; Target[Requested position target, rad]
+    Target --&gt; Servo[BAM servo model at each physics step]
+    Servo --&gt; Physics[Joint dynamics and contacts]
+    Physics --&gt; Encoder[Measured position and velocity]
+    Encoder --&gt; Next[Next actor observation]</pre>
+
+<p>The nominal case has no command lag. With lag enabled, the actuator's delay buffer selects an older target before computing its response. Mechanical limits, effort limits and servo dynamics belong to the actual configured model; the action formula alone does not guarantee a reachable target.</p>
+<table>
+<thead>
+<tr>
+<th>Simulation time</th>
+<th>0 ms</th>
+<th>5 ms</th>
+<th>10 ms</th>
+<th>15 ms</th>
+<th>20 ms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Actor input/action</td>
+<td>Read state; produce action A</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>Read new state; produce B</td>
+</tr>
+<tr>
+<td>Requested target</td>
+<td>A</td>
+<td>Hold A</td>
+<td>Hold A</td>
+<td>Hold A</td>
+<td>B</td>
+</tr>
+<tr>
+<td>Actuator and physics</td>
+<td>Advance 0–5</td>
+<td>Advance 5–10</td>
+<td>Advance 10–15</td>
+<td>Advance 15–20</td>
+<td>Advance 20–25</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Predict:</strong> can an observation that arrives 40 ms late be repaired by running physics four times per control interval? More physics steps do not make an old measurement newer; inspect this distinction in <a href="11-effects.html">the reality-gap sandbox</a>.</p>
+<p>Compare a supported pose with a free-base trial. Actuator response and balance are different problems: reaching one requested angle does not ensure that the centre of mass stays supported.</p>
+<p><strong>Experiment:</strong> request a small head movement, restore stance, and repeat with a larger movement. Record target and measured values. Never infer torque, speed, or ideal tracking merely from the slider's value.</p>
+<p><strong>Reference code:</strong> <code>JointControls.actions()</code> implements the inverse mapping; the maintained task's <code>BiasedJointPositionAction</code> applies it. The source robot config owns the mechanical/actuator parameters.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="03-puppet.html">← 3. Play with a puppet duck</a><a href="05-observations.html">5. Become an observation detective →</a></nav>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/8132b79d6c454fca1a0eaf7072b3da6fea6960f5/docs/locomotion/04-actions.md">View this lesson on GitHub</a> · Snapshot 8132b79</footer></main></div></body></html>
