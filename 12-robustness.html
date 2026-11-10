@@ -138,6 +138,8 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <span class="s">                   "--effects", str(effects), "--seeds", "0", "1", "2", "--output", str(output)]</span>
 <span class="s">        for checkpoint in models[profile]:</span>
 <span class="s">            command.extend(["--checkpoint", checkpoint])</span>
+<span class="s">        if (output / "configuration.json").is_file():</span>
+<span class="s">            command.append("--resume")</span>
 <span class="s">        subprocess.run(command, check=True)</span>
 <span class="s">        report = json.loads((output / "report.json").read_text())</span>
 <span class="s">        assert report["complete"] and not report["errors"]</span>
@@ -160,7 +162,7 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <span class="s">PY_MATRIX</span>
 </code></pre></div>
 
-<p>The starter grid uses one independent training seed and three matched starts: <strong>48 attempted evaluations</strong>. Its cross-training-seed standard deviation stays unavailable. Every cell reports response and survival separately; numerical failures remain invalid attempted outcomes. Incomplete/errored collections stop the script instead of becoming a finished grid. Keep the individual reports to inspect why a cell failed.</p>
+<p>The starter grid uses one independent training seed and three matched starts: <strong>48 attempted evaluations</strong>. Its cross-training-seed standard deviation stays unavailable. Every cell reports response and survival separately; numerical failures remain invalid attempted outcomes. Incomplete/errored collections stop the script instead of becoming a finished grid. Rerunning the unchanged script resumes existing cells and starts missing ones; the qualifier rejects changed settings, sources or policies. Choose a new root output directory for a different experiment. Keep the individual reports to inspect why a cell failed.</p>
 <p>For the broader planned comparison, train all four profiles with the lesson-8 longer budget and training seeds <strong>42, 0 and 1</strong>. Put three paths per profile in the JSON, then change the evaluation seed arguments to <code>0</code> through <code>9</code>. That produces <strong>480 attempts</strong> across twelve independently trained policies. Compare the per-policy rates and their sample standard deviation in each report. An outside-range delay, such as 60 ms, is a separate sensitivity condition, not another in-range result.</p>
 <p>The grid tests a hypothesis, not an expected improvement: identify a nominal-performance loss, a surviving but unresponsive policy and an outright fall. Investigate with two matched receipts in <code>compare.py</code>; do not remove an unfavorable outcome from the grid.</p>
 </details>
@@ -185,4 +187,4 @@ uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> <
 <p>Observation history is another explicit architecture experiment: it changes inputs, reset state and deployment requirements. Add it during training and verify the matching export/runtime rather than adding it only on the robot.</p>
 </details>
 <p><strong>Record:</strong> which uncertainty was sampled per robot, per episode or over time, and whether the candidate improved the same held-fixed test without losing nominal behavior.</p></article><nav class="pagination" aria-label="Previous and next lesson"><a href="11-effects.html">← 11. Turn a reality-gap knob</a><a href="13-deployment.html">13. Export without changing the policy →</a></nav>
-<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/6e3123f088079fce3b585c7362bbf7487b7ed733/docs/locomotion/12-robustness.md">View this lesson on GitHub</a> · Snapshot 6e3123f</footer></main></div></body></html>
+<footer>Reading preview · <a href="https://github.com/AntoineRichard/IsaacLabTutorial/blob/d3e987957320f1a7c617b776019313b286d373c1/docs/locomotion/12-robustness.md">View this lesson on GitHub</a> · Snapshot d3e9879</footer></main></div></body></html>
